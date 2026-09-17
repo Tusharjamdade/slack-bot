@@ -1,0 +1,65 @@
+# ============================================================
+# Environment Variables & Secrets
+# ============================================================
+.env
+.env.*
+!.env.example
+token.json
+credentials.json
+client_secret*.json
+*.pem
+*.key
+
+# ============================================================
+# Python & Virtual Environments
+# ============================================================
+.venv/
+venv/
+env/
+ENV/
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.python-version
+
+# ============================================================
+# Distribution / Packaging
+# ============================================================
+build/
+dist/
+develop-eggs/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# ============================================================
+# IDEs & System Files
+# ============================================================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+ehthumbs.db
+
+# ============================================================
+# Logs & Testing Caches
+# ============================================================
+*.log
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/

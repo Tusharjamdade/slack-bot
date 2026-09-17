@@ -1,0 +1,21 @@
+services:
+  slack-agent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: slack_ai_agent
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    volumes:
+      # Optional mounts for Google OAuth files if using file-based auth
+      - ./token.json:/app/token.json:rw
+      - ./credentials.json:/app/credentials.json:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s

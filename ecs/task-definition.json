@@ -1,0 +1,99 @@
+{
+  "family": "slack-ai-agent-fargate",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": [
+    "FARGATE"
+  ],
+  "cpu": "1024",
+  "memory": "2048",
+  "executionRoleArn": "arn:aws:iam::<AWS_ACCOUNT_ID>:role/ecsTaskExecutionRole",
+  "taskRoleArn": "arn:aws:iam::<AWS_ACCOUNT_ID>:role/ecsTaskRole",
+  "containerDefinitions": [
+    {
+      "name": "slack-ai-agent",
+      "image": "<AWS_ACCOUNT_ID>.dkr.ecr.<AWS_REGION>.amazonaws.com/slack-ai-agent:latest",
+      "essential": true,
+      "portMappings": [
+        {
+          "containerPort": 8000,
+          "hostPort": 8000,
+          "protocol": "tcp"
+        }
+      ],
+      "environment": [
+        {
+          "name": "HOST",
+          "value": "0.0.0.0"
+        },
+        {
+          "name": "PORT",
+          "value": "8000"
+        },
+        {
+          "name": "GROQ_MODEL",
+          "value": "llama-3.3-70b-versatile"
+        },
+        {
+          "name": "ENABLE_RAG",
+          "value": "true"
+        },
+        {
+          "name": "EMBEDDING_MODEL",
+          "value": "BAAI/bge-small-en-v1.5"
+        },
+        {
+          "name": "EMBEDDING_DIM",
+          "value": "384"
+        },
+        {
+          "name": "DB_SSLMODE",
+          "value": "require"
+        },
+        {
+          "name": "RAG_TOP_K",
+          "value": "5"
+        },
+        {
+          "name": "RAG_SIMILARITY_THRESHOLD",
+          "value": "0.60"
+        },
+        {
+          "name": "SHORT_TERM_MEMORY_LIMIT",
+          "value": "6"
+        }
+      ],
+      "secrets": [
+        {
+          "name": "SLACK_BOT_TOKEN",
+          "valueFrom": "arn:aws:secretsmanager:<AWS_REGION>:<AWS_ACCOUNT_ID>:secret:slack-agent-secrets:SLACK_BOT_TOKEN::"
+        },
+        {
+          "name": "GROQ_API_KEY",
+          "valueFrom": "arn:aws:secretsmanager:<AWS_REGION>:<AWS_ACCOUNT_ID>:secret:slack-agent-secrets:GROQ_API_KEY::"
+        },
+        {
+          "name": "DATABASE_URL",
+          "valueFrom": "arn:aws:secretsmanager:<AWS_REGION>:<AWS_ACCOUNT_ID>:secret:slack-agent-secrets:DATABASE_URL::"
+        }
+      ],
+      "healthCheck": {
+        "command": [
+          "CMD-SHELL",
+          "curl -f http://localhost:8000/health || exit 1"
+        ],
+        "interval": 30,
+        "timeout": 5,
+        "retries": 3,
+        "startPeriod": 15
+      },
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/slack-ai-agent",
+          "awslogs-region": "<AWS_REGION>",
+          "awslogs-stream-prefix": "fargate"
+        }
+      }
+    }
+  ]
+}

@@ -37,6 +37,38 @@ class Settings(BaseSettings):
     GOOGLE_KEEP_PASSWORD: Optional[str] = None
     GOOGLE_KEEP_MASTER_TOKEN: Optional[str] = None
 
+    # Database (PostgreSQL with pgvector - Local or AWS RDS)
+    DATABASE_URL: Optional[str] = None
+    POSTGRES_HOST: str = "localhost"
+    POSTGRES_PORT: int = 5432
+    POSTGRES_DB: str = "slackbot"
+    POSTGRES_USER: str = "postgres"
+    POSTGRES_PASSWORD: str = "postgres"
+    DB_SSLMODE: str = "prefer"  # Set to "require" for AWS RDS
+    DB_POOL_MIN_SIZE: int = 2
+    DB_POOL_MAX_SIZE: int = 10
+
+    # RAG and Embedding Configuration
+    ENABLE_RAG: bool = True
+    EMBEDDING_MODEL: str = "BAAI/bge-small-en-v1.5"
+    EMBEDDING_DIM: int = 384
+    RAG_TOP_K: int = 5
+    RAG_SIMILARITY_THRESHOLD: float = 0.60
+    SHORT_TERM_MEMORY_LIMIT: int = 6
+
+    def get_database_dsn(self) -> str:
+        """Return database DSN formatted for asyncpg."""
+        if self.DATABASE_URL:
+            # Handle postgres:// vs postgresql://
+            url = self.DATABASE_URL
+            if url.startswith("postgres://"):
+                url = "postgresql://" + url[len("postgres://"):]
+            return url
+        return (
+            f"postgresql://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@"
+            f"{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
+        )
+
     def validate_required_settings(self) -> None:
         """Validate core required environment variables on startup."""
         missing = []

@@ -9,3 +9,7 @@ google-api-python-client>=2.160.0
 google-auth-httplib2>=0.2.0
 google-auth-oauthlib>=1.2.1
 gkeepapi>=0.14.4
+asyncpg>=0.30.0
+pgvector>=0.3.6
+fastembed>=0.5.1
+psycopg[binary]>=3.2.0

@@ -51,15 +51,15 @@
         },
         {
           "name": "RAG_TOP_K",
-          "value": "5"
+          "value": "6"
         },
         {
           "name": "RAG_SIMILARITY_THRESHOLD",
-          "value": "0.60"
+          "value": "0.45"
         },
         {
           "name": "SHORT_TERM_MEMORY_LIMIT",
-          "value": "6"
+          "value": "12"
         }
       ],
       "secrets": [

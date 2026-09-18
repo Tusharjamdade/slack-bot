@@ -31,9 +31,9 @@ services:
     env_file:
       - .env
     environment:
-      # Connect to local postgres container by default when running docker-compose
-      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/slackbot
-      DB_SSLMODE: disable
+      # Use DATABASE_URL from .env if provided; defaults to local container only if unset
+      DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:postgres@postgres:5432/slackbot}
+      DB_SSLMODE: ${DB_SSLMODE:-prefer}
     volumes:
       # Mount Google OAuth files if using file-based auth
       - ./token.json:/app/token.json:rw

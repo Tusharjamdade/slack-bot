@@ -42,6 +42,29 @@ def search_chat_history(query: str, top_k: int = 5) -> str:
         return f"Error retrieving conversation history: {e}"
 
 
-rag_tools = [search_chat_history]
+@tool
+def get_recent_chat_history(limit: int = 15) -> str:
+    """
+    Retrieve chronological recent chat messages (past user questions and assistant responses)
+    from PostgreSQL.
+    
+    Use this tool whenever the user asks:
+    - 'what are my past questions?'
+    - 'what questions did I ask you in past?'
+    - 'what are my past conversations with you?'
+    - 'what did we talk about earlier?'
+    - 'show recent messages / recap conversation'
+    
+    Args:
+        limit: Number of recent messages to retrieve (default 15).
+    """
+    try:
+        return _run_async_safe(rag_service.get_recent_history_formatted(limit=limit))
+    except Exception as e:
+        logger.error("Error executing get_recent_chat_history tool: %s", e)
+        return f"Error retrieving conversation history: {e}"
 
-__all__ = ["search_chat_history", "rag_tools"]
+
+rag_tools = [search_chat_history, get_recent_chat_history]
+
+__all__ = ["search_chat_history", "get_recent_chat_history", "rag_tools"]

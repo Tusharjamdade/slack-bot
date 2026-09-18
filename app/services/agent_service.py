@@ -17,8 +17,10 @@ SYSTEM_PROMPT = """You are MyAgent, an intelligent AI assistant in Slack with ac
 Capabilities:
 1. Google Calendar: Check upcoming meetings (list_calendar_events), schedule events (create_calendar_event), search appointments (search_calendar_events).
 2. Gmail: Check unread messages (get_unread_emails), search emails (search_emails), read email details (read_email_content), send emails (send_email).
-3. Google Keep: List notes/checklists (list_keep_notes), create notes (create_keep_note), append to notes (append_to_keep_note).
-4. Long-Term Chat History & Memory: Search previous chats, past decisions, and conversation history using search_chat_history tool.
+3. Google Keep: Search notes (search_keep_notes), list notes/checklists (list_keep_notes), create notes (create_keep_note), append to notes (append_to_keep_note).
+4. Chat History & Memory:
+   - View chronological past questions, messages, and conversation recap using get_recent_chat_history tool.
+   - Search previous chats, past decisions, and topics via semantic search using search_chat_history tool.
 5. Tech & General Assistance: Programming, Software Engineering, DevOps, Data Science, Productivity.
 
 STRICT RESPONSE STYLE & FORMATTING RULES:
@@ -30,8 +32,8 @@ STRICT RESPONSE STYLE & FORMATTING RULES:
    - NEVER use markdown heading hashtags (#, ##, ###). Use single asterisks *Heading* if a title is required.
    - For lists, use simple bullets (- or •) without unnecessary sub-nesting.
    - For code, use standard backticks (`code` or ```code```).
-4. When performing an action (e.g. creating an event, sending an email), execute the tool directly and state the outcome in one line.
-5. When answering questions that reference past discussions or previous knowledge, synthesize the provided historical context or use search_chat_history to answer accurately. If no history is needed, answer or call tools directly without hesitation.
+4. When performing an action (e.g. creating an event, sending an email, adding a note), execute the tool directly and state the outcome in one line.
+5. When answering questions that reference past discussions, past questions, or previous knowledge, synthesize the provided conversation history / retrieved knowledge or use get_recent_chat_history / search_chat_history to answer accurately.
 """
 
 
@@ -136,10 +138,13 @@ class AgentService:
         try:
             recent_msgs = await rag_service.get_recent_history(
                 session_id=session_id,
+                channel_id=channel_id,
                 limit=settings.SHORT_TERM_MEMORY_LIMIT,
             )
-            # Exclude the very last message if it's the current user prompt
-            for msg in recent_msgs[:-1] if recent_msgs else []:
+            # Exclude current in-flight user prompt
+            for msg in recent_msgs:
+                if msg.get("role") == "user" and msg.get("content", "").strip() == message.strip():
+                    continue
                 role = "assistant" if msg["role"] == "assistant" else "user"
                 conversation_history.append({"role": role, "content": msg["content"]})
         except Exception as e:

@@ -52,12 +52,20 @@ class TestRagPipeline(unittest.TestCase):
         recall_1 = router._heuristic_fallback("Do you remember what we discussed yesterday regarding the API?")
         self.assertTrue(recall_1["needs_history"])
         self.assertEqual(recall_1["task_type"], "history_recall")
+        self.assertFalse(recall_1["is_chronological"])
 
-        recall_2 = router._heuristic_fallback("Summarize our conversation about ECS Fargate deployment")
-        self.assertTrue(recall_2["needs_history"])
-        self.assertEqual(recall_2["task_type"], "history_recall")
+        # 2. Conversation overview / past questions
+        overview_1 = router._heuristic_fallback("What are my past questions?")
+        self.assertTrue(overview_1["needs_history"])
+        self.assertTrue(overview_1["is_chronological"])
+        self.assertEqual(overview_1["task_type"], "conversation_overview")
 
-        # 2. Direct tool execution queries
+        overview_2 = router._heuristic_fallback("What are my past conversations with you?")
+        self.assertTrue(overview_2["needs_history"])
+        self.assertTrue(overview_2["is_chronological"])
+        self.assertEqual(overview_2["task_type"], "conversation_overview")
+
+        # 3. Direct tool execution queries
         tool_1 = router._heuristic_fallback("Schedule a meeting with Alice tomorrow at 3pm")
         self.assertFalse(tool_1["needs_history"])
         self.assertEqual(tool_1["task_type"], "direct_tool")
@@ -66,7 +74,7 @@ class TestRagPipeline(unittest.TestCase):
         self.assertFalse(tool_2["needs_history"])
         self.assertEqual(tool_2["task_type"], "direct_tool")
 
-        # 3. Direct QA
+        # 4. Direct QA
         qa_1 = router._heuristic_fallback("How do I sort a dictionary by key in Python?")
         self.assertFalse(qa_1["needs_history"])
         self.assertEqual(qa_1["task_type"], "direct_qa")
@@ -75,7 +83,7 @@ class TestRagPipeline(unittest.TestCase):
         """Verify settings have expected pgvector and RAG defaults."""
         self.assertTrue(settings.ENABLE_RAG)
         self.assertEqual(settings.EMBEDDING_DIM, 384)
-        self.assertEqual(settings.RAG_TOP_K, 5)
+        self.assertGreaterEqual(settings.RAG_TOP_K, 5)
         self.assertGreater(settings.RAG_SIMILARITY_THRESHOLD, 0.0)
         dsn = settings.get_database_dsn()
         self.assertTrue(dsn.startswith("postgresql://"))

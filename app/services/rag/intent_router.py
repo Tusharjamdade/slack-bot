@@ -9,34 +9,52 @@ from app.config import settings
 logger = logging.getLogger(__name__)
 
 ROUTER_PROMPT = """You are an intelligent Intent Router for an AI Assistant in Slack.
-Your task is to analyze the user's incoming message and determine whether answering it requires retrieving previous chat history/past knowledge from a vector database (RAG).
+Your task is to analyze the user's incoming message and determine whether answering it requires retrieving previous chat history/past knowledge from a database (RAG).
 
 CLASSIFICATION CRITERIA:
-1. "history_recall": The user is asking about past conversations, previous decisions, what was discussed, remembered facts, or context from earlier messages.
+1. "conversation_overview": The user is asking for a list of past questions, past conversations, recent messages, or a general recap/overview of what was discussed so far.
    -> needs_history: true
+   -> is_chronological: true
+   -> search_query: null
+   Examples:
+   - "What are my past questions?"
+   - "What questions did I ask you in past?"
+   - "What are my past conversations with you?"
+   - "Show my recent chat history."
+   - "What did we talk about earlier?"
+   - "Summarize our conversation so far."
+
+2. "history_recall": The user is asking about a specific topic, decision, fact, or entity discussed in the past.
+   -> needs_history: true
+   -> is_chronological: false
+   -> search_query: concise keyword query for vector search
    Examples:
    - "What did we decide about the database architecture yesterday?"
    - "What was the meeting time we discussed earlier?"
    - "Do you remember the customer's phone number?"
-   - "Summarize our chat regarding project deadlines."
+   - "What did we say about ECS Fargate?"
 
-2. "hybrid": The user wants to execute a tool (e.g. send email, schedule meeting, create note), BUT the details depend on past discussion.
+3. "hybrid": The user wants to execute a tool (e.g. send email, schedule meeting, create note), BUT the details depend on past discussion.
    -> needs_history: true
+   -> is_chronological: false
+   -> search_query: concise keyword query
    Examples:
    - "Send an email to Alice about the bug we discussed."
    - "Schedule the meeting we talked about earlier."
    - "Add the topics we discussed to my Keep notes."
 
-3. "direct_tool": The user provides all necessary details to perform a workspace action (Google Calendar, Gmail, Keep) right now.
+4. "direct_tool": The user provides all necessary details to perform a workspace action (Google Calendar, Gmail, Keep) right now.
    -> needs_history: false
+   -> is_chronological: false
    Examples:
    - "Schedule a meeting with Bob tomorrow at 3pm."
    - "Check my unread emails."
    - "Create a keep note titled 'Groceries' with apples and milk."
    - "Search my calendar for tomorrow's standup."
 
-4. "direct_qa": General knowledge, coding, math, explanations, greetings, or questions that don't depend on past conversation memory.
+5. "direct_qa": General knowledge, coding, math, explanations, greetings, or questions that don't depend on past conversation memory.
    -> needs_history: false
+   -> is_chronological: false
    Examples:
    - "How do I reverse a linked list in Python?"
    - "Explain the difference between ECS Fargate and EC2."
@@ -45,15 +63,16 @@ CLASSIFICATION CRITERIA:
 Respond ONLY with a JSON object in this exact structure:
 {
   "needs_history": true/false,
-  "task_type": "history_recall" | "hybrid" | "direct_tool" | "direct_qa",
-  "search_query": "concise keyword-rich search query for vector search (or null if needs_history is false)",
+  "is_chronological": true/false,
+  "task_type": "conversation_overview" | "history_recall" | "hybrid" | "direct_tool" | "direct_qa",
+  "search_query": "concise keyword-rich search query (or null if is_chronological or not needed)",
   "reasoning": "brief explanation (1 sentence)"
 }
 """
 
 
 class IntentRouter:
-    """Adaptive classifier to decide whether RAG vector retrieval is needed."""
+    """Adaptive classifier to decide whether RAG vector retrieval or chronological history is needed."""
 
     def __init__(self):
         self._llm = None
@@ -71,27 +90,44 @@ class IntentRouter:
     def _heuristic_fallback(self, message: str) -> Dict[str, Any]:
         """Fast fallback rule-based classifier if LLM call is unavailable."""
         msg_lower = message.lower()
-        
-        # Patterns strongly indicative of memory recall
+
+        # 1. Patterns strongly indicative of conversation overview / past questions
+        overview_patterns = [
+            r"\b(past|previous|recent|earlier)\s+(questions?|conversations?|messages?|chats?|queries)\b",
+            r"\bwhat\s+(questions?|did i ask|have i asked|were my questions)\b",
+            r"\b(what are|show|list|get|tell me)\s+(my\s+)?(past|previous|recent|all)\s+(questions?|conversations?|messages?|chats?)\b",
+            r"\b(recap|summarize)\s+(our\s+)?(conversation|chat|discussion|messages)\b",
+            r"\bwhat\s+(have we|did we)\s+(talked?|discussed?|chatted)\s+about\b",
+        ]
+        for pat in overview_patterns:
+            if re.search(pat, msg_lower):
+                return {
+                    "needs_history": True,
+                    "is_chronological": True,
+                    "task_type": "conversation_overview",
+                    "search_query": None,
+                    "reasoning": f"Matched chronological overview pattern: '{pat}'",
+                }
+
+        # 2. Patterns strongly indicative of specific memory recall
         recall_patterns = [
             r"\b(remember|recall|earlier|previous|yesterday|last week|last month)\b",
             r"\b(we discussed|we talked|we decided|you mentioned|i mentioned|did (we|i|they) say)\b",
             r"\bwhat was (that|the) (topic|link|file|decision|discussion|plan|meeting)\b",
-            r"\b(summarize|recap) (our|the) (conversation|chat|discussion)\b",
         ]
-        
         for pat in recall_patterns:
             if re.search(pat, msg_lower):
                 # Clean filler words for search query
                 clean_query = re.sub(r"\b(do you remember|what did we say about|can you recall)\b", "", msg_lower).strip()
                 return {
                     "needs_history": True,
+                    "is_chronological": False,
                     "task_type": "history_recall",
                     "search_query": clean_query or message,
                     "reasoning": f"Matched historical recall pattern: '{pat}'",
                 }
 
-        # Check for direct workspace actions
+        # 3. Check for direct workspace actions
         tool_patterns = [
             r"\b(schedule|calendar|meeting|appointment|event)\b",
             r"\b(email|gmail|inbox|unread)\b",
@@ -101,6 +137,7 @@ class IntentRouter:
             if re.search(pat, msg_lower):
                 return {
                     "needs_history": False,
+                    "is_chronological": False,
                     "task_type": "direct_tool",
                     "search_query": None,
                     "reasoning": "Direct workspace tool request without past context dependency",
@@ -108,6 +145,7 @@ class IntentRouter:
 
         return {
             "needs_history": False,
+            "is_chronological": False,
             "task_type": "direct_qa",
             "search_query": None,
             "reasoning": "General direct question or chit-chat",
@@ -120,6 +158,7 @@ class IntentRouter:
         if not settings.ENABLE_RAG:
             return {
                 "needs_history": False,
+                "is_chronological": False,
                 "task_type": "direct_qa",
                 "search_query": None,
                 "reasoning": "RAG is disabled in configuration",
@@ -130,6 +169,7 @@ class IntentRouter:
         if len(stripped.split()) <= 2 and stripped in ("hi", "hello", "hey", "test", "ok", "thanks", "bye"):
             return {
                 "needs_history": False,
+                "is_chronological": False,
                 "task_type": "direct_qa",
                 "search_query": None,
                 "reasoning": "Trivial greeting",
@@ -150,12 +190,15 @@ class IntentRouter:
             if json_match:
                 data = json.loads(json_match.group(0))
                 needs_history = bool(data.get("needs_history", False))
+                task_type = data.get("task_type", "direct_qa")
+                is_chronological = bool(data.get("is_chronological", False)) or task_type == "conversation_overview"
                 search_query = data.get("search_query")
-                if needs_history and not search_query:
+                if needs_history and not is_chronological and not search_query:
                     search_query = message
                 return {
                     "needs_history": needs_history,
-                    "task_type": data.get("task_type", "direct_qa"),
+                    "is_chronological": is_chronological,
+                    "task_type": task_type,
                     "search_query": search_query,
                     "reasoning": data.get("reasoning", "LLM router classification"),
                 }

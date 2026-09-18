@@ -40,6 +40,25 @@ def create_keep_note(title: str, text: str) -> str:
 
 
 @tool
+def search_keep_notes(query: str, max_results: int = 10) -> str:
+    """
+    Search notes in Google Keep matching a keyword, title, or topic (e.g. 'dmart list', 'groceries').
+    Args:
+        query: Search keyword or title to filter notes.
+        max_results: Max notes to return (default 10).
+    """
+    try:
+        notes = keep_service.list_notes(query=query, max_results=max_results)
+        if not notes:
+            return f"No Google Keep notes found matching '{query}'."
+        return json.dumps(notes, indent=2)
+    except PermissionError as e:
+        return f"Google Keep Configuration Required: {e}"
+    except Exception as e:
+        return f"Error searching Keep notes: {e}"
+
+
+@tool
 def append_to_keep_note(note_id: str, text: str) -> str:
     """
     Append text or a new line to an existing Google Keep note.
@@ -58,4 +77,5 @@ def append_to_keep_note(note_id: str, text: str) -> str:
         return f"Error updating Keep note: {e}"
 
 
-keep_tools = [list_keep_notes, create_keep_note, append_to_keep_note]
+keep_tools = [list_keep_notes, search_keep_notes, create_keep_note, append_to_keep_note]
+__all__ = ["list_keep_notes", "search_keep_notes", "create_keep_note", "append_to_keep_note", "keep_tools"]

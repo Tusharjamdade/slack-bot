@@ -52,9 +52,9 @@ class Settings(BaseSettings):
     ENABLE_RAG: bool = True
     EMBEDDING_MODEL: str = "BAAI/bge-small-en-v1.5"
     EMBEDDING_DIM: int = 384
-    RAG_TOP_K: int = 5
-    RAG_SIMILARITY_THRESHOLD: float = 0.60
-    SHORT_TERM_MEMORY_LIMIT: int = 6
+    RAG_TOP_K: int = 6
+    RAG_SIMILARITY_THRESHOLD: float = 0.45
+    SHORT_TERM_MEMORY_LIMIT: int = 12
 
     def get_database_dsn(self) -> str:
         """Return database DSN formatted for asyncpg."""

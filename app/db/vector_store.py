@@ -167,10 +167,11 @@ class VectorStore:
 
     async def get_recent_messages(
         self,
-        session_id: str,
+        session_id: Optional[str] = None,
+        channel_id: Optional[str] = None,
         limit: Optional[int] = None,
     ) -> List[Dict[str, Any]]:
-        """Fetch chronological recent messages for immediate conversational context."""
+        """Fetch chronological recent messages for conversational context or history review."""
         pool = await db_pool.get_pool()
         if not pool:
             return []
@@ -181,15 +182,16 @@ class VectorStore:
         FROM (
             SELECT id, session_id, channel_id, user_id, role, content, created_at
             FROM chat_messages
-            WHERE session_id = $1
+            WHERE ($1::varchar IS NULL OR session_id = $1)
+              AND ($2::varchar IS NULL OR channel_id = $2)
             ORDER BY created_at DESC
-            LIMIT $2
+            LIMIT $3
         ) sub
         ORDER BY created_at ASC;
         """
         try:
             async with pool.acquire() as conn:
-                rows = await conn.fetch(query, session_id, msg_limit)
+                rows = await conn.fetch(query, session_id, channel_id, msg_limit)
                 return [
                     {
                         "id": row["id"],

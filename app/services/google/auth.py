@@ -29,7 +29,7 @@ def get_google_credentials(scopes: Optional[List[str]] = None) -> Optional[Crede
     token_file = settings.GOOGLE_TOKEN_FILE
 
     # 1. Try loading from token.json
-    if os.path.exists(token_file):
+    if os.path.isfile(token_file):
         try:
             creds = Credentials.from_authorized_user_file(token_file, effective_scopes)
         except Exception as e:

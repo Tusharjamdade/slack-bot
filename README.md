@@ -224,7 +224,7 @@ In your GitHub repository, navigate to **Settings > Secrets and variables > Acti
 | :--- | :--- | :--- |
 | `AWS_ACCESS_KEY_ID` | IAM User Access Key with ECR push permissions | `AKIAIOSFODNN7EXAMPLE` |
 | `AWS_SECRET_ACCESS_KEY` | IAM User Secret Access Key | `wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY` |
-| `AWS_REGION` | *(Optional)* Target AWS Region | `us-east-1` (default if omitted) |
+| `AWS_REGION` | *(Optional)* Target AWS Region | `ap-south-1` (default if omitted) |
 | `ECR_REPOSITORY` | *(Optional)* ECR Repository Name | `slack-ai-agent` (default if omitted) |
 
 ### IAM Permissions Required for ECR Push

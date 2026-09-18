@@ -54,11 +54,12 @@ async def db_test():
     try:
         pool = await db_pool.get_pool()
         if not pool:
+            last_err = db_pool.get_last_error() or "Database connection pool could not be initialized"
             return JSONResponse(
                 status_code=503,
                 content={
                     "database": "failed",
-                    "error": "Database connection pool could not be initialized",
+                    "error": last_err,
                     "host": settings.POSTGRES_HOST,
                     "port": settings.POSTGRES_PORT,
                     "target_db": settings.POSTGRES_DB,

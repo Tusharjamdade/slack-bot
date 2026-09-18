@@ -16,6 +16,11 @@ class DatabasePool:
     def __init__(self):
         self._pool: Optional[asyncpg.Pool] = None
         self._is_initialized = False
+        self._last_error: Optional[str] = None
+
+    def get_last_error(self) -> Optional[str]:
+        """Return the last connection error if initialization failed."""
+        return self._last_error
 
     async def _init_connection(self, conn: asyncpg.Connection):
         """Configure each new connection from pool to support pgvector."""
@@ -55,13 +60,16 @@ class DatabasePool:
                 max_size=settings.DB_POOL_MAX_SIZE,
                 init=self._init_connection,
                 ssl=ssl_context,
+                timeout=15,
                 command_timeout=60,
             )
             self._is_initialized = True
+            self._last_error = None
             logger.info("Successfully connected to AWS RDS PostgreSQL connection pool.")
             return True
         except Exception as e:
-            logger.error("Failed to connect to AWS RDS PostgreSQL database (%s): %s", target_desc, e)
+            logger.exception("Failed to connect to AWS RDS PostgreSQL database (%s)", target_desc)
+            self._last_error = f"{type(e).__name__}: {str(e)}"
             self._pool = None
             self._is_initialized = False
             return False
@@ -83,7 +91,10 @@ class DatabasePool:
             "error": None,
         }
         if not self._pool:
-            health["error"] = "Database pool not initialized"
+            await self.get_pool()
+
+        if not self._pool:
+            health["error"] = self._last_error or "Database pool not initialized"
             return health
 
         start_time = asyncio.get_event_loop().time()

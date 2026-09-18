@@ -212,6 +212,53 @@ The script will automatically:
 
 ---
 
+## Automated CI/CD (GitHub Actions)
+
+A GitHub Actions workflow is provided in [`.github/workflows/deploy-ecr.yml`](file:///d:/My%20Programs/ML/MachineLearning/slack/.github/workflows/deploy-ecr.yml) that automatically builds and pushes the Docker image to Amazon ECR upon each commit to `master` or `main`.
+
+### Setup GitHub Secrets
+
+In your GitHub repository, navigate to **Settings > Secrets and variables > Actions** and add the following repository secrets:
+
+| Secret Name | Description | Example |
+| :--- | :--- | :--- |
+| `AWS_ACCESS_KEY_ID` | IAM User Access Key with ECR push permissions | `AKIAIOSFODNN7EXAMPLE` |
+| `AWS_SECRET_ACCESS_KEY` | IAM User Secret Access Key | `wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY` |
+| `AWS_REGION` | *(Optional)* Target AWS Region | `us-east-1` (default if omitted) |
+| `ECR_REPOSITORY` | *(Optional)* ECR Repository Name | `slack-ai-agent` (default if omitted) |
+
+### IAM Permissions Required for ECR Push
+
+Ensure your IAM user or role has the `AmazonEC2ContainerRegistryPowerUser` policy attached, or the following minimum permissions:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "ecr:GetAuthorizationToken",
+        "ecr:BatchCheckLayerAvailability",
+        "ecr:GetDownloadUrlForLayer",
+        "ecr:BatchGetImage",
+        "ecr:PutImage",
+        "ecr:InitiateLayerUpload",
+        "ecr:UploadLayerPart",
+        "ecr:CompleteLayerUpload",
+        "ecr:DescribeRepositories",
+        "ecr:CreateRepository"
+      ],
+      "Resource": "*"
+    }
+  ]
+}
+```
+
+Every `git push` to `master` will trigger the workflow, tagging the image with both the **Git commit SHA** and **`latest`** in Amazon ECR.
+
+---
+
 ## Slack App Configuration
 
 1. Create a Slack App at [api.slack.com/apps](https://api.slack.com/apps).

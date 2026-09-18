@@ -36,16 +36,19 @@ class Settings(BaseSettings):
     # Google Keep Configuration (for personal accounts using gkeepapi)
     GOOGLE_KEEP_USERNAME: Optional[str] = None
     GOOGLE_KEEP_PASSWORD: Optional[str] = None
-    GOOGLE_KEEP_MASTER_TOKEN: Optional[str] = None
+    # AWS Configuration
+    AWS_ACCESS_KEY_ID: Optional[str] = None
+    AWS_SECRET_ACCESS_KEY: Optional[str] = None
+    AWS_REGION: str = "ap-south-1"
 
-    # Database (PostgreSQL with pgvector - Local or AWS RDS)
-    DATABASE_URL: Optional[str] = None
-    POSTGRES_HOST: str = "localhost"
+    # Database (AWS RDS PostgreSQL with pgvector for RAG)
+    DATABASE_URL: str = ""
+    POSTGRES_HOST: str = ""
     POSTGRES_PORT: int = 5432
-    POSTGRES_DB: str = "slackbot"
-    POSTGRES_USER: str = "postgres"
-    POSTGRES_PASSWORD: str = "postgres"
-    DB_SSLMODE: str = "prefer"  # Set to "require" for AWS RDS
+    POSTGRES_DB: str = ""
+    POSTGRES_USER: str = ""
+    POSTGRES_PASSWORD: str = ""
+    DB_SSLMODE: str = "require"  # AWS RDS requires SSL by default
     DB_POOL_MIN_SIZE: int = 2
     DB_POOL_MAX_SIZE: int = 10
 
@@ -93,29 +96,29 @@ class Settings(BaseSettings):
                 pass
 
     def get_database_dsn(self) -> str:
-        """Return clean database DSN formatted for asyncpg."""
-        if self.DATABASE_URL:
-            url = self.DATABASE_URL.strip().strip("'\"")
-            if url.startswith("postgres://"):
-                url = "postgresql://" + url[len("postgres://"):]
-            
-            # asyncpg does not accept sslmode query parameter in the connection URL
-            try:
-                parsed = urllib.parse.urlparse(url)
-                if parsed.query:
-                    q = urllib.parse.parse_qs(parsed.query)
-                    q.pop("sslmode", None)
-                    q.pop("ssl", None)
-                    new_query = urllib.parse.urlencode(q, doseq=True)
-                    url = urllib.parse.urlunparse(parsed._replace(query=new_query))
-            except Exception:
-                pass
-            return url
+        """Return clean database DSN formatted for asyncpg connecting to AWS RDS."""
+        if not self.DATABASE_URL:
+            raise ValueError(
+                "DATABASE_URL is not set. Please provide your AWS RDS PostgreSQL connection string in .env "
+                "(e.g. postgresql://user:password@<rds-endpoint>:5432/<dbname>)"
+            )
 
-        return (
-            f"postgresql://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@"
-            f"{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
-        )
+        url = self.DATABASE_URL.strip().strip("'\"")
+        if url.startswith("postgres://"):
+            url = "postgresql://" + url[len("postgres://"):]
+
+        # asyncpg does not accept sslmode query parameter in the connection URL
+        try:
+            parsed = urllib.parse.urlparse(url)
+            if parsed.query:
+                q = urllib.parse.parse_qs(parsed.query)
+                q.pop("sslmode", None)
+                q.pop("ssl", None)
+                new_query = urllib.parse.urlencode(q, doseq=True)
+                url = urllib.parse.urlunparse(parsed._replace(query=new_query))
+        except Exception:
+            pass
+        return url
 
     def validate_required_settings(self) -> None:
         """Validate core required environment variables on startup."""
@@ -124,6 +127,8 @@ class Settings(BaseSettings):
             missing.append("SLACK_BOT_TOKEN")
         if not self.GROQ_API_KEY:
             missing.append("GROQ_API_KEY")
+        if self.ENABLE_RAG and not self.DATABASE_URL:
+            missing.append("DATABASE_URL (AWS RDS PostgreSQL connection URL)")
         if missing:
             raise ValueError(f"Missing required environment variable(s): {', '.join(missing)}")
 

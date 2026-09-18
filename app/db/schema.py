@@ -67,11 +67,16 @@ async def create_schema() -> bool:
     try:
         logger.info("Running database migrations (pgvector schema)...")
         async with pool.acquire() as conn:
-            # Enable extension first in separate transaction
-            await conn.execute("CREATE EXTENSION IF NOT EXISTS vector;")
-            # Register vector in case it was just created
+            # Enable extension first in separate statement (safe on AWS RDS if extension already installed)
+            try:
+                await conn.execute("CREATE EXTENSION IF NOT EXISTS vector;")
+            except Exception as ext_err:
+                logger.warning("Could not execute 'CREATE EXTENSION vector' (may already exist or requires rds_superuser): %s", ext_err)
+            
+            # Register vector in connection
             from pgvector.asyncpg import register_vector
             await register_vector(conn)
+            
             # Create tables and indexes
             await conn.execute(SCHEMA_SQL)
         logger.info("Database schema initialized successfully with pgvector support.")

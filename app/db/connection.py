@@ -46,9 +46,9 @@ class DatabasePool:
                 ssl_context.check_hostname = False
                 ssl_context.verify_mode = ssl.CERT_NONE
 
+        target_desc = f"{settings.POSTGRES_HOST}:{settings.POSTGRES_PORT} (database={settings.POSTGRES_DB}, ssl={ssl_mode})"
         try:
-            logger.info("Connecting to PostgreSQL at %s:%s (db=%s, ssl=%s)...",
-                        settings.POSTGRES_HOST, settings.POSTGRES_PORT, settings.POSTGRES_DB, ssl_mode)
+            logger.info("Connecting to AWS RDS PostgreSQL at %s...", target_desc)
             self._pool = await asyncpg.create_pool(
                 dsn=dsn,
                 min_size=settings.DB_POOL_MIN_SIZE,
@@ -58,10 +58,10 @@ class DatabasePool:
                 command_timeout=60,
             )
             self._is_initialized = True
-            logger.info("Successfully connected to PostgreSQL connection pool.")
+            logger.info("Successfully connected to AWS RDS PostgreSQL connection pool.")
             return True
         except Exception as e:
-            logger.error("Failed to connect to PostgreSQL database: %s", e)
+            logger.error("Failed to connect to AWS RDS PostgreSQL database (%s): %s", target_desc, e)
             self._pool = None
             self._is_initialized = False
             return False

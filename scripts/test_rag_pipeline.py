@@ -85,8 +85,9 @@ class TestRagPipeline(unittest.TestCase):
         self.assertEqual(settings.EMBEDDING_DIM, 384)
         self.assertGreaterEqual(settings.RAG_TOP_K, 5)
         self.assertGreater(settings.RAG_SIMILARITY_THRESHOLD, 0.0)
-        dsn = settings.get_database_dsn()
-        self.assertTrue(dsn.startswith("postgresql://"))
+        if settings.DATABASE_URL:
+            dsn = settings.get_database_dsn()
+            self.assertTrue(dsn.startswith("postgresql://"))
 
     def test_embedding_generation(self):
         """Verify FastEmbed generates 384-dimensional vector embeddings."""

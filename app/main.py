@@ -28,15 +28,15 @@ async def lifespan(app: FastAPI):
     logger.info(" Active Tools (%d): %s", len(all_tools), [t.name for t in all_tools])
     logger.info("==========================================")
 
-    # 1. Initialize PostgreSQL + pgvector connection pool and schema
+    # 1. Initialize AWS PostgreSQL + pgvector connection pool and schema
     try:
         db_ok = await init_db()
         if db_ok:
-            logger.info("PostgreSQL + pgvector connection & schema ready.")
+            logger.info("AWS PostgreSQL (pgvector) connection & schema ready.")
         else:
-            logger.warning("PostgreSQL connection deferred or not reachable at startup.")
+            logger.warning("AWS PostgreSQL connection deferred or not reachable at startup.")
     except Exception as e:
-        logger.warning("Could not initialize PostgreSQL on startup: %s", e)
+        logger.warning("Could not initialize AWS PostgreSQL on startup: %s", e)
 
     # 2. Pre-warm embedding model in background if RAG is enabled
     if settings.ENABLE_RAG:

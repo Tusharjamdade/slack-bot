@@ -1,5 +1,6 @@
 import re
 import logging
+import asyncio
 from typing import Optional
 from fastapi import APIRouter, Request, BackgroundTasks
 from fastapi.responses import PlainTextResponse, JSONResponse
@@ -8,7 +9,7 @@ from app.config import settings
 from app.services.slack_service import slack_service
 from app.services.agent_service import agent_service
 from app.tools import all_tools
-from app.db.connection import check_db_health
+from app.db.connection import check_db_health, db_pool
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +45,65 @@ async def health():
         "embedding_model": settings.EMBEDDING_MODEL,
         "available_tools": [tool.name for tool in all_tools],
     }
+
+
+@router.get("/db-test")
+async def db_test():
+    """Diagnostic endpoint to test AWS RDS PostgreSQL connection, latency, and pgvector extension."""
+    start_time = asyncio.get_event_loop().time()
+    try:
+        pool = await db_pool.get_pool()
+        if not pool:
+            return JSONResponse(
+                status_code=503,
+                content={
+                    "database": "failed",
+                    "error": "Database connection pool could not be initialized",
+                    "host": settings.POSTGRES_HOST,
+                    "port": settings.POSTGRES_PORT,
+                    "target_db": settings.POSTGRES_DB,
+                    "hint": "Check DATABASE_URL, AWS RDS Security Group inbound rules (port 5432), and Public Accessibility.",
+                },
+            )
+
+        async with pool.acquire() as conn:
+            version = await conn.fetchval("SELECT version()")
+            vector = await conn.fetchval(
+                "SELECT extversion FROM pg_extension WHERE extname = 'vector'"
+            )
+            # Table counts
+            msg_count = await conn.fetchval("SELECT COUNT(*) FROM chat_messages")
+            emb_count = await conn.fetchval("SELECT COUNT(*) FROM chat_embeddings")
+            elapsed_ms = round((asyncio.get_event_loop().time() - start_time) * 1000, 2)
+
+            return {
+                "database": "connected",
+                "latency_ms": elapsed_ms,
+                "host": settings.POSTGRES_HOST,
+                "port": settings.POSTGRES_PORT,
+                "target_db": settings.POSTGRES_DB,
+                "ssl_mode": settings.DB_SSLMODE,
+                "postgres_version": version,
+                "pgvector_installed": bool(vector),
+                "pgvector_version": vector,
+                "chat_messages_count": msg_count,
+                "chat_embeddings_count": emb_count,
+            }
+
+    except Exception as e:
+        logger.error("DB test endpoint error: %s", e)
+        return JSONResponse(
+            status_code=500,
+            content={
+                "database": "failed",
+                "error": str(e),
+                "error_type": type(e).__name__,
+                "host": settings.POSTGRES_HOST,
+                "port": settings.POSTGRES_PORT,
+                "target_db": settings.POSTGRES_DB,
+                "hint": "Ensure your AWS RDS Security Group allows inbound traffic on port 5432 and Publicly Accessible is enabled if connecting externally.",
+            },
+        )
 
 
 async def handle_slack_message(

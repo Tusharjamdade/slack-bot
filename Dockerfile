@@ -26,9 +26,10 @@ RUN uv pip install --system --no-cache -r requirement.txt
 RUN mkdir -p /app/cache/fastembed && \
     python3 -c "from fastembed import TextEmbedding; TextEmbedding(model_name='BAAI/bge-small-en-v1.5', cache_dir='/app/cache/fastembed')"
 
-# Copy application source code
+# Copy application source code and static UI assets
 COPY app/ ./app/
 COPY scripts/ ./scripts/
+COPY static/ ./static/
 COPY main.py ./
 
 # Create non-root user and set permissions for security in ECS Fargate

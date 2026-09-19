@@ -1,310 +1,150 @@
-# Slack AI Agent (Google Workspace, Groq & pgvector RAG)
+# Slack AI Agent (Google Workspace, Groq & AWS RDS pgvector RAG)
 
-A modular, production-grade AI assistant inside Slack powered by LangChain and Groq LLMs, equipped with:
-- **Long-Term Memory & RAG**: Amazon RDS PostgreSQL with **`pgvector`** for semantic search over past conversations, decisions, and notes.
-- **Adaptive Task Routing**: Smart classifier that retrieves historical context only when needed, executing direct tool actions or answers with zero latency overhead.
-- **Google Workspace Productivity**: Native tools for **Google Calendar**, **Gmail**, and **Google Keep**.
-- **Cloud Native Deployment**: Fully containerized and configured for **AWS ECS Fargate** and **Docker Compose**.
+A production-grade AI assistant inside Slack powered by LangChain, Groq LLMs, and AWS cloud infrastructure:
+- **Long-Term Memory & RAG**: Amazon RDS PostgreSQL with **`pgvector`** for semantic search over conversations and decisions.
+- **Adaptive Task Routing**: Smart classifier that routes directly to tools, direct QA, or vector retrieval with zero overhead.
+- **Google Workspace**: Native tools for **Google Calendar**, **Gmail**, and **Google Keep**.
+- **Automated CI/CD**: Auto-builds and pushes multi-stage Docker images to **Amazon ECR** via GitHub Actions on every commit.
 
 ---
 
-## Architecture Overview
+## Architecture Flow
 
 ```
-                          ┌──────────────────────────┐
-                          │   Slack User / Channel   │
-                          └─────────────┬────────────┘
-                                        │ (Webhook)
-                                        ▼
-                          ┌──────────────────────────┐
-                          │ FastAPI  /slack/events   │
-                          └─────────────┬────────────┘
-                                        │ (Background Task)
-                  ┌─────────────────────┴─────────────────────┐
-                  │                                           │
-                  ▼                                           ▼
-   ┌─────────────────────────────┐             ┌─────────────────────────────┐
-   │ Persist User Message to DB  │             │   Adaptive Intent Router    │
-   │  & pgvector Embeddings      │             │    (Groq LLaMA Classifier)  │
-   └─────────────────────────────┘             └──────────────┬──────────────┘
-                                                              │
-         ┌──────────────────────────────┬─────────────────────┴──────────────────────┐
-         ▼                              ▼                                            ▼
-┌──────────────────┐          ┌────────────────────┐                       ┌───────────────────┐
-│ Direct Workspace │          │     Direct QA      │                       │  History Recall   │
-│ Tool Action      │          │     / Coding       │                       │  / Hybrid Task    │
-│ (Calendar/Gmail) │          │ (Immediate Answer) │                       └─────────┬─────────┘
-└────────┬─────────┘          └─────────┬──────────┘                                 │
-         │                              │                                            ▼
-         │                              │                                  ┌───────────────────┐
-         │                              │                                  │  pgvector Cosine  │
-         │                              │                                  │ Similarity Search │
-         │                              │                                  └─────────┬─────────┘
-         │                              │                                            │ (Top-K Chunks)
-         ▼                              ▼                                            ▼
-   ┌───────────────────────────────────────────────────────────────────────────────────────────┐
-   │                                LangChain Agent Reasoning                                  │
-   │                 (Tools: Calendar, Gmail, Keep, search_chat_history)                       │
-   └────────────────────────────────────────────┬──────────────────────────────────────────────┘
-                                                │
-                                                ▼
-                               ┌─────────────────────────────────┐
-                               │ Persist Assistant Reply to DB   │
-                               │   & pgvector Embeddings         │
-                               └────────────────┬────────────────┘
-                                                │
-                                                ▼
-                               ┌─────────────────────────────────┐
-                               │     Send Slack Reply / Thread   │
-                               └─────────────────────────────────┘
+[Slack User] ──► [FastAPI /slack/events] ──► [Adaptive Intent Router]
+                                                    │
+         ┌────────────────────────┬─────────────────┴────────────────────────┐
+         ▼                        ▼                                          ▼
+[Direct Tool Action]      [Direct QA / Code]                         [pgvector RAG Recall]
+ (Calendar/Gmail/Keep)      (Instant Answer)                          (FastEmbed BGE Chunks)
+         │                        │                                          │
+         └────────────────────────┼──────────────────────────────────────────┘
+                                  ▼
+                     [LangChain Agent Execution]
+                                  │
+                                  ▼
+                   [AWS RDS PostgreSQL Persistence]
+                                  │
+                                  ▼
+                    [Slack Response / Thread Reply]
 ```
 
 ---
 
-## Key Features
+## Core Capabilities
 
-1. **Persistent Conversation Storage & Memory**:
-   - Every user message and assistant reply is recorded in PostgreSQL.
-   - Embeddings are generated using **FastEmbed** (`BAAI/bge-small-en-v1.5`, 384 dimensions) via ONNX on CPU. Fast (<10ms), zero external API cost, and pre-baked in Docker.
-   - HNSW index on pgvector for high-speed cosine similarity searches.
-2. **Adaptive Task Routing**:
-   - **Direct Workspace Actions**: (e.g. *"Schedule a meeting tomorrow at 3pm"*, *"Check my unread emails"*) directly invoke the respective tools without vector retrieval overhead.
-   - **Direct QA / Code**: (e.g. *"How do I implement binary search?"*) answers immediately.
-   - **History Recall**: (e.g. *"What did we decide about the database yesterday?"*, *"What was that meeting link?"*) extracts clean search keywords, retrieves top-$k$ chunks from pgvector, and injects relevant context.
-   - **In-Loop Recall Tool**: The agent also possesses `search_chat_history` in its active toolbelt for dynamic multi-step retrieval.
-3. **Workspace Productivity**:
-   - 📅 **Google Calendar**: List, schedule, and search events.
-   - ✉️ **Gmail**: Search inbox, read message details, fetch unread emails, send emails.
-   - 📝 **Google Keep**: List notes, search checklists, create notes, append items.
-4. **AWS ECS Fargate & RDS Ready**:
-   - Multi-stage Dockerfile with non-root security.
-   - Pre-warmed model weights for instant container boot.
-   - Production ECS task definition with AWS Secrets Manager support.
+1. **Event-Driven Proactive Notifications**:
+   - 📧 **Gmail Incoming Mail Alert**: Automatically detects newly received emails and notifies your Slack channel with sender, subject, and snippet preview.
+   - 📅 **Calendar 30-Minute Meeting Alerts**: Polls upcoming events and alerts you in Slack when a meeting is starting within the next 30 minutes (including join links).
+   - ⏰ **Conversational Timers & Reminders**: Ask the bot to set timers (e.g., *"set a timer for 15 minutes for deployment"* or *"remind me in 30 minutes"*), and it will proactively ping your chat when the countdown expires.
+2. **pgvector Long-Term Memory**: Automatically embeds conversations with ONNX-accelerated **FastEmbed** (`BAAI/bge-small-en-v1.5`, 384-dim, CPU-native) and performs cosine similarity search via HNSW indexes.
+3. **Adaptive Router & High Performance**:
+   - Asynchronous, connection-pooled Slack dispatch (`httpx.AsyncClient`) avoiding event loop blockage.
+   - Pre-compiled sanitization pipelines and dynamic real-time temporal grounding.
+4. **Google Workspace Automation**:
+   - 📅 **Calendar**: View, create, and search schedule events.
+   - ✉️ **Gmail**: List unread emails, search inbox, read messages, and send replies.
+   - 📝 **Google Keep**: Create, list, search, and append items to notes.
+5. **Resilient Database Layer**: Async connection pool (`asyncpg`) supporting AWS RDS SSL modes (`require`), auto-reconnect, and health probes.
 
 ---
 
-## Project Structure
+## Environment Setup (`.env`)
 
-```text
-├── app/
-│   ├── api/routes.py              # FastAPI endpoints (/health, /slack/events)
-│   ├── db/
-│   │   ├── connection.py          # asyncpg connection pool with RDS SSL
-│   │   ├── schema.py              # PostgreSQL + pgvector DDL & migrations
-│   │   └── vector_store.py        # Message persistence & cosine similarity search
-│   ├── services/
-│   │   ├── rag/
-│   │   │   ├── embedding_service.py # FastEmbed ONNX embedding generator
-│   │   │   ├── intent_router.py     # Adaptive task classifier (direct vs recall)
-│   │   │   └── rag_service.py       # RAG pipeline coordinator
-│   │   ├── agent_service.py       # LangChain agent orchestrator with memory
-│   │   ├── slack_service.py       # Slack messaging & deduplication
-│   │   └── google/                # Auth, Calendar, Gmail & Keep services
-│   ├── tools/                     # LangChain @tool definitions (incl. rag_tools)
-│   ├── config.py                  # Pydantic Settings configuration
-│   └── main.py                    # FastAPI app factory & lifespan manager
-├── ecs/
-│   ├── task-definition.json       # AWS ECS Fargate task definition template
-│   ├── rds_setup.sql              # RDS PostgreSQL pgvector initialization script
-│   ├── deploy_fargate.sh          # Bash deployment automation script
-│   └── deploy_fargate.ps1         # PowerShell deployment automation script
-├── Dockerfile & docker-compose.yml# Containerization & local stack
-├── requirement.txt & pyproject.toml
-└── main.py                        # Root runner entrypoint
+Create a `.env` file in the project root:
+
+```env
+SLACK_BOT_TOKEN=xoxb-your-slack-bot-token
+GROQ_API_KEY=gsk_your_groq_api_key
+GROQ_MODEL=openai/gpt-oss-20b
+
+# AWS RDS PostgreSQL with pgvector (URL-encode special characters in password!)
+DATABASE_URL=postgresql://postgres:<ENCODED_PASSWORD>@<rds-endpoint>.rds.amazonaws.com:5432/postgres
+
+# AWS Credentials for ECR CI/CD
+AWS_ACCESS_KEY_ID=your-aws-access-key-id
+AWS_SECRET_ACCESS_KEY=your-aws-secret-access-key
+AWS_REGION=ap-south-1
+
+GOOGLE_CREDENTIALS_FILE=credentials.json
+GOOGLE_TOKEN_FILE=token.json
 ```
 
----
-
-## Local Development & Testing
-
-### Option A: Local Docker Compose (Includes PostgreSQL with pgvector)
-
-The fastest way to test the entire stack locally:
-
-```bash
-# 1. Clone or navigate to the directory
-cp .env.example .env
-# Fill in your SLACK_BOT_TOKEN and GROQ_API_KEY in .env
-
-# 2. Start PostgreSQL (pgvector) and Slack Agent containers
-docker compose up --build -d
-
-# 3. View logs
-docker compose logs -f slack-agent
-
-# 4. Check health endpoint
-curl http://localhost:8000/health
-```
-
-### Option B: Local Python Environment (WSL / Linux)
-
-```bash
-# 1. Create and activate virtual environment
-uv venv
-source .venv/bin/activate   # or .\.venv\Scripts\Activate.ps1 on Windows
-
-# 2. Install dependencies
-uv pip install -r requirement.txt
-
-# 3. Configure environment
-cp .env.example .env
-
-# 4. Start app
-uv run uvicorn main:app --host 0.0.0.0 --port 8000 --reload
-```
+> **Note**: If your database password contains characters like `#`, `!`, or `@`, URL-encode them (e.g. via `urllib.parse.quote(password, safe="")`).
 
 ---
 
 ## AWS RDS PostgreSQL + pgvector Setup
 
-1. **Create an RDS PostgreSQL Instance**:
-   - Engine: **PostgreSQL 15.2+** or **16+**.
-   - Instance Class: `db.t4g.micro` or `db.t4g.small` (for dev) / `db.r6g.large` (for production).
-   - Storage: 20 GB+ gp3.
-   - In the DB Parameter Group, ensure `rds.force_ssl = 1` (recommended).
-2. **Connect & Initialize pgvector**:
-   - Connect to RDS via psql:
-     ```bash
-     psql -h <your-rds-endpoint>.rds.amazonaws.com -U postgres -d postgres
-     ```
-   - Run the setup script in [`ecs/rds_setup.sql`](file:///d:/My%20Programs/ML/MachineLearning/slack/ecs/rds_setup.sql):
-     ```sql
-     CREATE DATABASE slackbot;
-     \c slackbot
-     CREATE EXTENSION IF NOT EXISTS vector;
-     ```
-   - The agent will automatically run table and HNSW index migrations upon first startup.
+1. **Create RDS Instance**: PostgreSQL 15+ in AWS RDS (e.g. `db.t4g.micro` or `db.t4g.small`).
+2. **Connectivity Settings**:
+   - **Publicly Accessible**: Set to **Yes** if connecting from local environments or external servers.
+   - **VPC Security Group**: Add an Inbound Rule for **PostgreSQL (Port 5432)** from `0.0.0.0/0` or your IP/ECS Security Group.
+3. **Enable pgvector**:
+   ```sql
+   CREATE EXTENSION IF NOT EXISTS vector;
+   ```
+   *Tables and HNSW vector indexes are auto-migrated by the app on startup.*
 
 ---
 
-## AWS ECS Fargate Deployment
+## Local Development & Docker
 
-### 1. Store Secrets in AWS Secrets Manager
-
-Store sensitive tokens in AWS Secrets Manager (e.g. secret name `slack-agent-secrets`):
-- `SLACK_BOT_TOKEN`: `xoxb-...`
-- `GROQ_API_KEY`: `gsk_...`
-- `DATABASE_URL`: `postgresql://username:password@<rds-endpoint>:5432/slackbot`
-
-### 2. Deploy with Automated Script
-
-#### Linux / macOS:
+### Option 1: Docker Compose
 ```bash
-chmod +x ecs/deploy_fargate.sh
-export AWS_REGION="us-east-1"
-export ECS_CLUSTER_NAME="slack-agent-cluster"
-export ECS_SERVICE_NAME="slack-ai-agent-service"
-./ecs/deploy_fargate.sh
+# Build and run container locally
+docker compose up --build -d
+
+# Check real-time logs
+docker compose logs -f slack-agent
 ```
 
-#### Windows PowerShell:
-```powershell
-.\ecs\deploy_fargate.ps1 -AwsRegion "us-east-1" -EcsClusterName "slack-agent-cluster" -EcsServiceName "slack-ai-agent-service"
+### Option 2: Local Python (uv / virtualenv)
+```bash
+uv venv && source .venv/bin/activate    # Windows: .\.venv\Scripts\Activate.ps1
+uv pip install -r requirement.txt
+uv run uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-The script will automatically:
-1. Create or locate the Amazon ECR repository.
-2. Authenticate Docker with ECR.
-3. Build the Linux/amd64 multi-stage Docker image (pre-baking the FastEmbed model).
-4. Push the image to ECR.
-5. Register the new task definition revision from [`ecs/task-definition.json`](file:///d:/My%20Programs/ML/MachineLearning/slack/ecs/task-definition.json).
-6. Trigger a zero-downtime rolling update on your ECS Fargate service and wait for stability.
+---
+
+## API & Health Endpoints
+
+- **`GET /health`**: Returns system status, registered tools, and database connection latency.
+- **`GET /db-test`**: Deep diagnostic testing PostgreSQL version, `pgvector` extension status, latency, and row counts.
+- **`POST /slack/events`**: Slack Events API webhook receiver.
+
+```bash
+# Verify database connection and pgvector
+curl http://localhost:8000/db-test
+```
+
+Sample `/db-test` output:
+```json
+{
+  "database": "connected",
+  "latency_ms": 102.8,
+  "postgres": "PostgreSQL 16.3 on aarch64-unknown-linux-gnu...",
+  "pgvector": "0.7.0",
+  "counts": { "conversations": 4, "messages": 12 }
+}
+```
 
 ---
 
 ## Automated CI/CD (GitHub Actions)
 
-A GitHub Actions workflow is provided in [`.github/workflows/deploy-ecr.yml`](file:///d:/My%20Programs/ML/MachineLearning/slack/.github/workflows/deploy-ecr.yml) that automatically builds and pushes the Docker image to Amazon ECR upon each commit to `master` or `main`.
-
-### Setup GitHub Secrets
-
-In your GitHub repository, navigate to **Settings > Secrets and variables > Actions** and add the following repository secrets:
-
-| Secret Name | Description | Example |
-| :--- | :--- | :--- |
-| `AWS_ACCESS_KEY_ID` | IAM User Access Key with ECR push permissions | `AKIAIOSFODNN7EXAMPLE` |
-| `AWS_SECRET_ACCESS_KEY` | IAM User Secret Access Key | `wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY` |
-| `AWS_REGION` | *(Optional)* Target AWS Region | `ap-south-1` (default if omitted) |
-| `ECR_REPOSITORY` | *(Optional)* ECR Repository Name | `slack-ai-agent` (default if omitted) |
-
-### IAM Permissions Required for ECR Push
-
-Ensure your IAM user or role has the `AmazonEC2ContainerRegistryPowerUser` policy attached, or the following minimum permissions:
-
-```json
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Action": [
-        "ecr:GetAuthorizationToken",
-        "ecr:BatchCheckLayerAvailability",
-        "ecr:GetDownloadUrlForLayer",
-        "ecr:BatchGetImage",
-        "ecr:PutImage",
-        "ecr:InitiateLayerUpload",
-        "ecr:UploadLayerPart",
-        "ecr:CompleteLayerUpload",
-        "ecr:DescribeRepositories",
-        "ecr:CreateRepository"
-      ],
-      "Resource": "*"
-    }
-  ]
-}
-```
-
-Every `git push` to `master` will trigger the workflow, tagging the image with both the **Git commit SHA** and **`latest`** in Amazon ECR.
+The workflow at `.github/workflows/deploy-ecr.yml` triggers on push to `master`/`main`:
+1. Authenticates with AWS using `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`.
+2. Logs in to **Amazon ECR** in `ap-south-1`.
+3. Builds the multi-stage Docker image and pre-bakes FastEmbed model weights.
+4. Pushes tags `latest` and `<commit-sha>` to the ECR repository `slack-ai-agent`.
 
 ---
 
 ## Slack App Configuration
 
-1. Create a Slack App at [api.slack.com/apps](https://api.slack.com/apps).
-2. Under **OAuth & Permissions**, add Bot Scopes:
-   - `chat:write`, `app_mentions:read`, `channels:history`, `im:history`, `groups:history`
-3. Install the app to your workspace and copy the Bot Token (`xoxb-...`) to your environment / Secrets Manager.
-4. Set **Event Subscriptions** Request URL to your ALB / API Gateway or public URL:
-   `https://<your-load-balancer-domain>/slack/events`
-5. Subscribe to Bot Events: `message.channels`, `message.im`, and `app_mention`.
-
----
-
-## Health Check & Verification
-
-Hit the `/health` endpoint to verify database connectivity, pgvector status, and registered tools:
-
-```bash
-curl http://localhost:8000/health
-```
-
-Sample Response:
-```json
-{
-  "status": "healthy",
-  "slack_configured": true,
-  "groq_configured": true,
-  "database": {
-    "connected": true,
-    "pgvector_installed": true,
-    "latency_ms": 1.42,
-    "error": null
-  },
-  "rag_enabled": true,
-  "embedding_model": "BAAI/bge-small-en-v1.5",
-  "available_tools": [
-    "list_calendar_events",
-    "create_calendar_event",
-    "search_calendar_events",
-    "search_emails",
-    "get_unread_emails",
-    "read_email_content",
-    "send_email",
-    "list_keep_notes",
-    "create_keep_note",
-    "append_to_keep_note",
-    "search_chat_history"
-  ]
-}
-```
+1. Create an app at [api.slack.com/apps](https://api.slack.com/apps) with Bot Scopes:
+   `chat:write`, `app_mentions:read`, `channels:history`, `im:history`.
+2. Set **Event Subscriptions** Request URL: `https://<your-domain>/slack/events`.
+3. Subscribe to events: `app_mention`, `message.im`, `message.channels`.

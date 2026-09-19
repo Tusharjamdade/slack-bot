@@ -4,43 +4,43 @@ from typing import Optional, List, Dict, Any
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
-from app.services.google.auth import get_google_credentials
+from app.services.google.auth import get_google_credentials, get_google_auth_link_for_current_user
 
 logger = logging.getLogger(__name__)
 
 
 class CalendarService:
-    """Service to interact with Google Calendar API."""
+    """Service to interact with Google Calendar API with per-user isolation."""
 
     def __init__(self):
-        self._service = None
+        pass
 
     def get_service(self):
         creds = get_google_credentials()
         if not creds:
+            auth_link = get_google_auth_link_for_current_user()
             raise PermissionError(
-                "Google Calendar is not authenticated. Please run 'python scripts/setup_google_auth.py' "
-                "or configure GOOGLE_TOKEN_FILE / GOOGLE_REFRESH_TOKEN in .env."
+                f"Your Google Calendar account is not connected yet. "
+                f"Please connect your personal Google account to access your calendar: {auth_link}"
             )
-        if not self._service or creds.expired:
-            self._service = build("calendar", "v3", credentials=creds)
-        return self._service
+        return build("calendar", "v3", credentials=creds)
 
     def list_events(
         self,
-        max_results: int = 10,
+        max_results: int = 4,
         time_min: Optional[str] = None,
         time_max: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
-        """List upcoming events from the primary calendar."""
+        """List upcoming events from the primary calendar with compact payload."""
         service = self.get_service()
         if not time_min:
             time_min = datetime.now(timezone.utc).isoformat()
 
+        effective_max = min(max_results, 6)
         kwargs: Dict[str, Any] = {
             "calendarId": "primary",
             "timeMin": time_min,
-            "maxResults": max_results,
+            "maxResults": effective_max,
             "singleEvents": True,
             "orderBy": "startTime",
         }
@@ -54,14 +54,14 @@ class CalendarService:
         for item in items:
             start = item.get("start", {}).get("dateTime", item.get("start", {}).get("date"))
             end = item.get("end", {}).get("dateTime", item.get("end", {}).get("date"))
+            desc = (item.get("description") or "")[:80]
             events.append({
                 "id": item.get("id"),
-                "summary": item.get("summary", "No Title"),
+                "summary": (item.get("summary") or "Untitled Event")[:60],
                 "start": start,
                 "end": end,
-                "location": item.get("location", ""),
-                "description": item.get("description", ""),
-                "link": item.get("htmlLink", ""),
+                "location": (item.get("location") or "")[:50],
+                "description": desc,
             })
         return events
 

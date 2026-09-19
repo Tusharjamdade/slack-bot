@@ -18,22 +18,23 @@ class VectorStore:
         channel_id: str,
         thread_ts: Optional[str] = None,
         metadata: Optional[Dict[str, Any]] = None,
+        team_id: Optional[str] = None,
     ) -> None:
-        """Create or update conversation session record."""
+        """Create or update conversation session record with team_id isolation."""
         pool = await db_pool.get_pool()
         if not pool:
             return
 
         meta_json = json.dumps(metadata or {})
         query = """
-        INSERT INTO conversations (session_id, channel_id, thread_ts, metadata, updated_at)
-        VALUES ($1, $2, $3, $4::jsonb, CURRENT_TIMESTAMP)
+        INSERT INTO conversations (session_id, channel_id, thread_ts, metadata, updated_at, team_id)
+        VALUES ($1, $2, $3, $4::jsonb, CURRENT_TIMESTAMP, $5)
         ON CONFLICT (session_id) 
-        DO UPDATE SET updated_at = CURRENT_TIMESTAMP;
+        DO UPDATE SET updated_at = CURRENT_TIMESTAMP, team_id = COALESCE(EXCLUDED.team_id, conversations.team_id);
         """
         try:
             async with pool.acquire() as conn:
-                await conn.execute(query, session_id, channel_id, thread_ts, meta_json)
+                await conn.execute(query, session_id, channel_id, thread_ts, meta_json, team_id)
         except Exception as e:
             logger.error("Failed to ensure conversation record: %s", e)
 
@@ -46,27 +47,33 @@ class VectorStore:
         content: str,
         tool_calls: Optional[Any] = None,
         metadata: Optional[Dict[str, Any]] = None,
+        team_id: Optional[str] = None,
     ) -> Optional[int]:
-        """Save raw chat message turn to PostgreSQL."""
+        """Save raw chat message turn to PostgreSQL with team_id isolation."""
         pool = await db_pool.get_pool()
         if not pool:
             return None
 
         # Ensure conversation exists
-        await self.ensure_conversation(session_id=session_id, channel_id=channel_id)
+        await self.ensure_conversation(session_id=session_id, channel_id=channel_id, team_id=team_id)
 
-        meta_json = json.dumps(metadata or {})
+        meta_dict = dict(metadata or {})
+        if team_id:
+            meta_dict["team_id"] = team_id
+        if user_id:
+            meta_dict["user_id"] = user_id
+        meta_json = json.dumps(meta_dict)
         tool_calls_json = json.dumps(tool_calls) if tool_calls is not None else None
 
         query = """
-        INSERT INTO chat_messages (session_id, channel_id, user_id, role, content, tool_calls, metadata)
-        VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb)
+        INSERT INTO chat_messages (session_id, channel_id, user_id, role, content, tool_calls, metadata, team_id)
+        VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8)
         RETURNING id;
         """
         try:
             async with pool.acquire() as conn:
                 message_id = await conn.fetchval(
-                    query, session_id, channel_id, user_id, role, content, tool_calls_json, meta_json
+                    query, session_id, channel_id, user_id, role, content, tool_calls_json, meta_json, team_id
                 )
                 return message_id
         except Exception as e:
@@ -82,25 +89,29 @@ class VectorStore:
         chunk_text: str,
         embedding: List[float],
         metadata: Optional[Dict[str, Any]] = None,
+        team_id: Optional[str] = None,
     ) -> Optional[int]:
-        """Save vector chunk to chat_embeddings table."""
+        """Save vector chunk to chat_embeddings table with team_id isolation."""
         pool = await db_pool.get_pool()
         if not pool:
             return None
 
-        meta_json = json.dumps(metadata or {})
+        meta_dict = dict(metadata or {})
+        if team_id:
+            meta_dict["team_id"] = team_id
+        meta_json = json.dumps(meta_dict)
         # Ensure embedding is numpy array or list compatible with pgvector
         vec = np.array(embedding, dtype=np.float32)
 
         query = """
-        INSERT INTO chat_embeddings (message_id, session_id, channel_id, speaker_role, chunk_text, embedding, metadata)
-        VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb)
+        INSERT INTO chat_embeddings (message_id, session_id, channel_id, speaker_role, chunk_text, embedding, metadata, team_id)
+        VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8)
         RETURNING id;
         """
         try:
             async with pool.acquire() as conn:
                 embed_id = await conn.fetchval(
-                    query, message_id, session_id, channel_id, speaker_role, chunk_text, vec, meta_json
+                    query, message_id, session_id, channel_id, speaker_role, chunk_text, vec, meta_json, team_id
                 )
                 return embed_id
         except Exception as e:
@@ -113,9 +124,10 @@ class VectorStore:
         channel_id: Optional[str] = None,
         top_k: Optional[int] = None,
         threshold: Optional[float] = None,
+        team_id: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """
-        Cosine similarity search across conversation history using pgvector.
+        Cosine similarity search across conversation history with strict team_id isolation.
         Uses 1 - (embedding <=> query) as similarity score.
         """
         pool = await db_pool.get_pool()
@@ -140,13 +152,14 @@ class VectorStore:
             1 - (embedding <=> $1) AS similarity
         FROM chat_embeddings
         WHERE ($2::varchar IS NULL OR channel_id = $2)
+          AND ($5::varchar IS NULL OR team_id = $5)
           AND (1 - (embedding <=> $1)) >= $3
         ORDER BY embedding <=> $1 ASC
         LIMIT $4;
         """
         try:
             async with pool.acquire() as conn:
-                rows = await conn.fetch(query, vec, channel_id, sim_threshold, k)
+                rows = await conn.fetch(query, vec, channel_id, sim_threshold, k, team_id)
                 results = []
                 for row in rows:
                     results.append({

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Google Workspace OAuth Setup Script
-Generates token.json with permissions for Google Calendar, Gmail, and Google Keep.
+Generates token.json with permissions for Google Calendar and Gmail.
 Supports both desktop browsers and WSL / headless environments.
 """
 
@@ -14,7 +14,6 @@ SCOPES = [
     "https://www.googleapis.com/auth/calendar",
     "https://www.googleapis.com/auth/gmail.modify",
     "https://www.googleapis.com/auth/gmail.send",
-    "https://www.googleapis.com/auth/keep",
 ]
 
 CREDENTIALS_FILE = os.getenv("GOOGLE_CREDENTIALS_FILE", "credentials.json")
@@ -23,7 +22,7 @@ TOKEN_FILE = os.getenv("GOOGLE_TOKEN_FILE", "token.json")
 
 def main():
     print("==========================================================")
-    print(" Google Workspace OAuth Setup (Calendar, Gmail, Keep)")
+    print(" Google Workspace OAuth Setup (Calendar, Gmail)")
     print("==========================================================")
 
     if not os.path.exists(CREDENTIALS_FILE):
@@ -34,7 +33,6 @@ def main():
         print("3. Enable APIs in 'APIs & Services' > 'Library':")
         print("   - Google Calendar API")
         print("   - Gmail API")
-        print("   - Google Keep API (if using Workspace)")
         print("4. Go to 'APIs & Services' > 'OAuth consent screen':")
         print("   - Choose 'External' (or 'Internal' for Workspace)")
         print("   - Add your email under 'Test users'")

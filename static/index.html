@@ -1,0 +1,1973 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SlackOps AI — Enterprise Multi-Tenant Slack Assistant</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0b0f19;
+      --card-bg: rgba(18, 24, 38, 0.82);
+      --card-border: rgba(255, 255, 255, 0.08);
+      --card-hover-border: rgba(99, 102, 241, 0.45);
+      --primary: #6366f1;
+      --primary-hover: #4f46e5;
+      --primary-glow: rgba(99, 102, 241, 0.35);
+      --slack-purple: #4a154b;
+      --slack-purple-hover: #611f69;
+      --slack-green: #2eb67d;
+      --slack-blue: #36c5f0;
+      --slack-yellow: #ecb22e;
+      --slack-red: #e01e5a;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --text-dim: #64748b;
+      --accent-green: #10b981;
+      --accent-amber: #f59e0b;
+      --accent-red: #ef4444;
+      --radius-lg: 16px;
+      --radius-md: 12px;
+      --radius-sm: 8px;
+      --transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      background-color: var(--bg);
+      background-image: 
+        radial-gradient(at 15% 15%, rgba(99, 102, 241, 0.20) 0px, transparent 50%),
+        radial-gradient(at 85% 20%, rgba(236, 178, 46, 0.12) 0px, transparent 50%),
+        radial-gradient(at 50% 85%, rgba(46, 182, 125, 0.15) 0px, transparent 55%);
+      background-attachment: fixed;
+      color: var(--text-main);
+      font-family: 'Inter', sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      line-height: 1.5;
+      overflow-x: hidden;
+    }
+
+    h1, h2, h3, h4, .brand-title {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 0 24px;
+      width: 100%;
+    }
+
+    /* Header */
+    header {
+      border-bottom: 1px solid var(--card-border);
+      background: rgba(11, 15, 25, 0.88);
+      backdrop-filter: blur(16px);
+      position: sticky;
+      top: 0;
+      z-index: 50;
+    }
+
+    .header-content {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 76px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      text-decoration: none;
+      color: var(--text-main);
+    }
+
+    .brand-icon {
+      width: 42px;
+      height: 42px;
+      background: linear-gradient(135deg, #6366f1, #a855f7);
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 8px 20px var(--primary-glow);
+    }
+
+    .brand-icon svg {
+      width: 24px;
+      height: 24px;
+      fill: #ffffff;
+    }
+
+    .brand-title {
+      font-weight: 800;
+      font-size: 1.3rem;
+      letter-spacing: -0.02em;
+    }
+
+    .brand-title span {
+      background: linear-gradient(135deg, #818cf8, #c084fc);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+    }
+
+    .nav-link {
+      color: var(--text-muted);
+      text-decoration: none;
+      font-size: 0.9rem;
+      font-weight: 500;
+      transition: var(--transition);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .nav-link:hover {
+      color: #fff;
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .session-badge {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--card-border);
+      border-radius: 9999px;
+      padding: 6px 14px;
+      font-size: 0.85rem;
+      color: var(--text-muted);
+    }
+
+    .session-badge strong {
+      color: #fff;
+    }
+
+    /* Buttons */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      padding: 10px 20px;
+      border-radius: var(--radius-sm);
+      font-weight: 600;
+      font-size: 0.92rem;
+      text-decoration: none;
+      transition: var(--transition);
+      cursor: pointer;
+      border: none;
+    }
+
+    .btn-slack {
+      background: var(--slack-purple);
+      color: #ffffff;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      box-shadow: 0 4px 14px rgba(74, 21, 75, 0.4);
+    }
+
+    .btn-slack:hover {
+      background: var(--slack-purple-hover);
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(74, 21, 75, 0.6);
+    }
+
+    .btn-slack svg {
+      width: 20px;
+      height: 20px;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, var(--primary), #4f46e5);
+      color: #fff;
+      box-shadow: 0 4px 16px var(--primary-glow);
+    }
+
+    .btn-primary:hover {
+      opacity: 0.95;
+      transform: translateY(-2px);
+      box-shadow: 0 6px 22px var(--primary-glow);
+    }
+
+    .btn-outline {
+      background: rgba(255, 255, 255, 0.04);
+      color: var(--text-main);
+      border: 1px solid var(--card-border);
+    }
+
+    .btn-outline:hover {
+      background: rgba(255, 255, 255, 0.08);
+      border-color: rgba(255, 255, 255, 0.2);
+    }
+
+    .btn-danger-outline {
+      background: rgba(239, 68, 68, 0.1);
+      color: #fca5a5;
+      border: 1px solid rgba(239, 68, 68, 0.3);
+    }
+
+    .btn-danger-outline:hover {
+      background: rgba(239, 68, 68, 0.2);
+      border-color: rgba(239, 68, 68, 0.5);
+    }
+
+    /* Banner / Alerts */
+    .banner {
+      display: none !important;
+      padding: 14px 20px;
+      border-radius: var(--radius-md);
+      margin-top: 24px;
+      animation: slideDown 0.35s ease;
+      font-size: 0.95rem;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .banner.visible {
+      display: flex !important;
+    }
+
+    .banner.success {
+      background: rgba(16, 185, 129, 0.15);
+      border: 1px solid rgba(16, 185, 129, 0.4);
+      color: #34d399;
+    }
+
+    .banner.error {
+      background: rgba(239, 68, 68, 0.15);
+      border: 1px solid rgba(239, 68, 68, 0.4);
+      color: #f87171;
+    }
+
+    @keyframes slideDown {
+      from { opacity: 0; transform: translateY(-10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Hero Section */
+    .hero {
+      padding: 64px 0 44px 0;
+      text-align: center;
+    }
+
+    .hero-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 16px;
+      background: rgba(99, 102, 241, 0.12);
+      border: 1px solid rgba(99, 102, 241, 0.25);
+      border-radius: 9999px;
+      color: #818cf8;
+      font-size: 0.85rem;
+      font-weight: 600;
+      margin-bottom: 24px;
+    }
+
+    .hero h1 {
+      font-size: 3.2rem;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      line-height: 1.15;
+      margin-bottom: 20px;
+    }
+
+    .hero h1 span {
+      background: linear-gradient(135deg, #ffffff 30%, #94a3b8);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .hero p {
+      font-size: 1.2rem;
+      color: var(--text-muted);
+      max-width: 720px;
+      margin: 0 auto 36px auto;
+      line-height: 1.6;
+    }
+
+    .hero-cta {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    /* Quick Highlight Grid */
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 24px;
+      margin: 40px 0 50px 0;
+    }
+
+    .feature-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius-lg);
+      padding: 26px;
+      backdrop-filter: blur(20px);
+      transition: var(--transition);
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .feature-card:hover {
+      border-color: var(--card-hover-border);
+      transform: translateY(-3px);
+    }
+
+    .feature-icon {
+      width: 48px;
+      height: 48px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.5rem;
+      margin-bottom: 4px;
+    }
+
+    .feature-title {
+      font-size: 1.15rem;
+      font-weight: 700;
+      color: var(--text-main);
+    }
+
+    .feature-desc {
+      font-size: 0.92rem;
+      color: var(--text-muted);
+      line-height: 1.5;
+    }
+
+    /* Documentation & Capability Section */
+    .guide-section-wrapper {
+      margin: 60px 0;
+    }
+
+    .section-header {
+      text-align: center;
+      max-width: 780px;
+      margin: 0 auto 36px auto;
+    }
+
+    .section-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 14px;
+      background: rgba(99, 102, 241, 0.12);
+      border: 1px solid rgba(99, 102, 241, 0.28);
+      border-radius: 9999px;
+      color: #818cf8;
+      font-size: 0.8rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 14px;
+    }
+
+    .section-title {
+      font-size: 2.2rem;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      margin-bottom: 12px;
+    }
+
+    .section-subtitle {
+      font-size: 1.05rem;
+      color: var(--text-muted);
+      line-height: 1.55;
+    }
+
+    /* Filter Tabs */
+    .filter-tabs {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 32px;
+    }
+
+    .tab-btn {
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--card-border);
+      color: var(--text-muted);
+      padding: 8px 18px;
+      border-radius: 9999px;
+      font-size: 0.88rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: var(--transition);
+    }
+
+    .tab-btn:hover {
+      color: var(--text-main);
+      background: rgba(255, 255, 255, 0.08);
+      border-color: rgba(255, 255, 255, 0.2);
+    }
+
+    .tab-btn.active {
+      background: linear-gradient(135deg, var(--primary), #4f46e5);
+      color: #fff;
+      border-color: var(--primary);
+      box-shadow: 0 4px 14px var(--primary-glow);
+    }
+
+    /* Capabilities Detailed Grid */
+    .capabilities-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+      gap: 24px;
+    }
+
+    .cap-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius-lg);
+      padding: 28px;
+      backdrop-filter: blur(20px);
+      transition: var(--transition);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      position: relative;
+    }
+
+    .cap-card:hover {
+      border-color: var(--card-hover-border);
+      transform: translateY(-3px);
+      box-shadow: 0 12px 32px -10px rgba(0, 0, 0, 0.5);
+    }
+
+    .cap-card-top {
+      margin-bottom: 20px;
+    }
+
+    .cap-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+
+    .cap-icon-box {
+      width: 46px;
+      height: 46px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.5rem;
+    }
+
+    .badge-tag {
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      padding: 4px 10px;
+      border-radius: 9999px;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      color: var(--text-muted);
+    }
+
+    .badge-tag.personal {
+      background: rgba(54, 197, 240, 0.15);
+      border-color: rgba(54, 197, 240, 0.3);
+      color: #36c5f0;
+    }
+
+    .badge-tag.team {
+      background: rgba(168, 85, 247, 0.15);
+      border-color: rgba(168, 85, 247, 0.3);
+      color: #c084fc;
+    }
+
+    .badge-tag.privacy {
+      background: rgba(16, 185, 129, 0.15);
+      border-color: rgba(16, 185, 129, 0.3);
+      color: #34d399;
+    }
+
+    .badge-tag.auto {
+      background: rgba(245, 158, 11, 0.15);
+      border-color: rgba(245, 158, 11, 0.3);
+      color: #fbbf24;
+    }
+
+    .cap-title {
+      font-size: 1.25rem;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+
+    .cap-what {
+      font-size: 0.92rem;
+      color: var(--text-muted);
+      line-height: 1.55;
+      margin-bottom: 14px;
+    }
+
+    .cap-how {
+      background: rgba(255, 255, 255, 0.025);
+      border-left: 3px solid var(--primary);
+      border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+      padding: 10px 14px;
+      font-size: 0.85rem;
+      color: #cbd5e1;
+      line-height: 1.5;
+      margin-bottom: 18px;
+    }
+
+    .cap-how strong {
+      color: #fff;
+    }
+
+    /* Prompt Chips */
+    .prompts-title {
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-dim);
+      font-weight: 700;
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .prompt-chips {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .prompt-chip {
+      background: rgba(99, 102, 241, 0.08);
+      border: 1px solid rgba(99, 102, 241, 0.2);
+      border-radius: var(--radius-sm);
+      padding: 8px 12px;
+      font-size: 0.85rem;
+      color: #e0e7ff;
+      cursor: pointer;
+      transition: var(--transition);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      text-align: left;
+    }
+
+    .prompt-chip:hover {
+      background: rgba(99, 102, 241, 0.18);
+      border-color: var(--primary);
+      transform: translateX(3px);
+      color: #fff;
+    }
+
+    .prompt-chip .chip-action {
+      font-size: 0.75rem;
+      color: var(--primary);
+      font-weight: 600;
+      opacity: 0.8;
+    }
+
+    .prompt-chip:hover .chip-action {
+      opacity: 1;
+    }
+
+    /* Setup Guide Cards */
+    .guide-card {
+      background: linear-gradient(135deg, rgba(99, 102, 241, 0.08), rgba(168, 85, 247, 0.05));
+      border: 1px solid rgba(99, 102, 241, 0.25);
+      border-radius: var(--radius-lg);
+      padding: 32px;
+      margin: 40px 0 60px 0;
+    }
+
+    .guide-title {
+      font-size: 1.35rem;
+      font-weight: 800;
+      margin-bottom: 24px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .steps-list {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 20px;
+    }
+
+    .step-item {
+      display: flex;
+      gap: 16px;
+      align-items: flex-start;
+    }
+
+    .step-num {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: var(--primary);
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 0.9rem;
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+
+    .step-text h4 {
+      font-size: 1rem;
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+
+    .step-text p {
+      font-size: 0.88rem;
+      color: var(--text-muted);
+      line-height: 1.45;
+    }
+
+    /* Authenticated Dashboard Styles */
+    .dashboard-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 24px;
+      margin-bottom: 48px;
+    }
+
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius-lg);
+      padding: 28px;
+      backdrop-filter: blur(20px);
+      box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.5);
+      transition: var(--transition);
+    }
+
+    .card:hover {
+      border-color: var(--card-hover-border);
+    }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .card-title-group {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .card-title {
+      font-size: 1.25rem;
+      font-weight: 700;
+    }
+
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      padding: 4px 10px;
+      border-radius: 9999px;
+    }
+
+    .status-badge.live {
+      background: rgba(16, 185, 129, 0.15);
+      color: #34d399;
+      border: 1px solid rgba(16, 185, 129, 0.3);
+    }
+
+    .status-badge.live::before {
+      content: "";
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #10b981;
+      box-shadow: 0 0 8px #10b981;
+    }
+
+    .status-badge.warning {
+      background: rgba(245, 158, 11, 0.15);
+      color: #fbbf24;
+      border: 1px solid rgba(245, 158, 11, 0.3);
+    }
+
+    .status-badge.inactive {
+      background: rgba(148, 163, 184, 0.15);
+      color: #94a3b8;
+      border: 1px solid rgba(148, 163, 184, 0.3);
+    }
+
+    .workspace-details {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius-md);
+      padding: 18px;
+    }
+
+    .detail-item {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .detail-label {
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-dim);
+      font-weight: 600;
+    }
+
+    .detail-val {
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: var(--text-main);
+    }
+
+    /* Google Connection Section */
+    .google-connect-box {
+      background: linear-gradient(135deg, rgba(99, 102, 241, 0.08), rgba(168, 85, 247, 0.08));
+      border: 1px solid rgba(99, 102, 241, 0.25);
+      border-radius: var(--radius-md);
+      padding: 22px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+      flex-wrap: wrap;
+      margin-bottom: 24px;
+    }
+
+    .google-info {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .google-logo-box {
+      width: 48px;
+      height: 48px;
+      background: #ffffff;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    }
+
+    .google-logo-box svg {
+      width: 26px;
+      height: 26px;
+    }
+
+    .google-text h4 {
+      font-size: 1.05rem;
+      font-weight: 700;
+      margin-bottom: 2px;
+    }
+
+    .google-text p {
+      font-size: 0.88rem;
+      color: var(--text-muted);
+    }
+
+    /* Tools Subgrid */
+    .tools-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 20px;
+      margin-top: 10px;
+    }
+
+    .tool-card {
+      background: rgba(255, 255, 255, 0.025);
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius-md);
+      padding: 22px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      transition: var(--transition);
+    }
+
+    .tool-card:hover {
+      background: rgba(255, 255, 255, 0.04);
+      border-color: var(--card-hover-border);
+      transform: translateY(-2px);
+    }
+
+    .tool-top {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      margin-bottom: 14px;
+    }
+
+    .tool-icon {
+      width: 44px;
+      height: 44px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.4rem;
+    }
+
+    .tool-icon.calendar {
+      background: rgba(54, 197, 240, 0.15);
+      border: 1px solid rgba(54, 197, 240, 0.3);
+      color: #36c5f0;
+    }
+
+    .tool-icon.email {
+      background: rgba(224, 30, 90, 0.15);
+      border: 1px solid rgba(224, 30, 90, 0.3);
+      color: #e01e5a;
+    }
+
+    .tool-title {
+      font-size: 1.1rem;
+      font-weight: 700;
+      margin-bottom: 6px;
+    }
+
+    .tool-desc {
+      font-size: 0.88rem;
+      color: var(--text-muted);
+      margin-bottom: 18px;
+      line-height: 1.45;
+    }
+
+    .tool-features {
+      list-style: none;
+      margin-bottom: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .tool-features li {
+      font-size: 0.8rem;
+      color: var(--text-dim);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .tool-features li::before {
+      content: "✓";
+      color: #10b981;
+      font-weight: bold;
+    }
+
+    .toggle-wrapper {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding-top: 14px;
+      border-top: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .toggle-label {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--text-main);
+    }
+
+    .switch {
+      position: relative;
+      display: inline-block;
+      width: 48px;
+      height: 26px;
+    }
+
+    .switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: rgba(255, 255, 255, 0.15);
+      transition: .3s;
+      border-radius: 26px;
+    }
+
+    .slider:before {
+      position: absolute;
+      content: "";
+      height: 20px;
+      width: 20px;
+      left: 3px;
+      bottom: 3px;
+      background-color: white;
+      transition: .3s;
+      border-radius: 50%;
+    }
+
+    input:checked + .slider {
+      background-color: #10b981;
+    }
+
+    input:checked + .slider:before {
+      transform: translateX(22px);
+    }
+
+    /* Slack Channel Instruction Banner */
+    .slack-invite-guide {
+      background: rgba(74, 21, 75, 0.2);
+      border: 1px solid rgba(74, 21, 75, 0.4);
+      border-radius: var(--radius-md);
+      padding: 18px 22px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    .slack-invite-guide svg {
+      width: 32px;
+      height: 32px;
+      flex-shrink: 0;
+      color: #36c5f0;
+    }
+
+    .slack-invite-guide h4 {
+      font-size: 0.98rem;
+      font-weight: 700;
+      margin-bottom: 2px;
+    }
+
+    .slack-invite-guide p {
+      font-size: 0.88rem;
+      color: var(--text-muted);
+    }
+
+    .slack-invite-guide code {
+      background: rgba(0, 0, 0, 0.4);
+      padding: 2px 8px;
+      border-radius: 4px;
+      color: #38bdf8;
+      font-family: monospace;
+    }
+
+    /* Test Chat Console */
+    .chat-console {
+      margin-top: 18px;
+      background: rgba(11, 15, 25, 0.65);
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius-md);
+      overflow: hidden;
+    }
+
+    .chat-header {
+      padding: 14px 20px;
+      background: rgba(255, 255, 255, 0.02);
+      border-bottom: 1px solid var(--card-border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .chat-header h4 {
+      font-size: 0.95rem;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .chat-body {
+      padding: 20px;
+      min-height: 120px;
+      max-height: 260px;
+      overflow-y: auto;
+      font-family: monospace;
+      font-size: 0.9rem;
+      color: #e2e8f0;
+      white-space: pre-wrap;
+    }
+
+    .chat-input-bar {
+      display: flex;
+      border-top: 1px solid var(--card-border);
+      background: rgba(255, 255, 255, 0.02);
+      padding: 10px;
+      gap: 10px;
+    }
+
+    .chat-input-bar input {
+      flex: 1;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius-sm);
+      padding: 10px 14px;
+      color: #fff;
+      font-family: inherit;
+      font-size: 0.9rem;
+      outline: none;
+    }
+
+    .chat-input-bar input:focus {
+      border-color: var(--primary);
+    }
+
+    /* Toast */
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: #1e293b;
+      color: #fff;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+      border-radius: var(--radius-md);
+      padding: 14px 22px;
+      font-size: 0.92rem;
+      display: none;
+      align-items: center;
+      gap: 12px;
+      z-index: 100;
+      animation: fadeIn 0.25s ease;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Footer */
+    footer {
+      margin-top: auto;
+      border-top: 1px solid var(--card-border);
+      padding: 36px 0;
+      font-size: 0.85rem;
+      color: var(--text-dim);
+      text-align: center;
+    }
+
+    @media (max-width: 768px) {
+      .hero h1 { font-size: 2.2rem; }
+      .header-content { flex-direction: column; height: auto; padding: 16px 0; gap: 12px; }
+      .nav-links { display: none; }
+      .google-connect-box { flex-direction: column; align-items: flex-start; }
+      .capabilities-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Toast Notification -->
+  <div id="toast" class="toast">
+    <span id="toast-message">Action successful</span>
+  </div>
+
+  <!-- Header -->
+  <header>
+    <div class="container header-content">
+      <a href="/" class="brand">
+        <div class="brand-icon">
+          <svg viewBox="0 0 24 24">
+            <path d="M5.042 15.165a2.528 2.528 0 0 1-2.52-2.523c0-1.393 1.127-2.52 2.52-2.52h2.52v2.52c0 1.394-1.127 2.523-2.52 2.523zm0-8.835a2.528 2.528 0 0 1-2.52-2.52c0-1.394 1.13-2.523 2.52-2.523 1.393 0 2.52 1.13 2.52 2.523v2.52H5.042zm3.792 0a2.528 2.528 0 0 1 2.523-2.52c1.394 0 2.52 1.13 2.52 2.523v6.315H8.834V6.33zM15.15 5.042a2.528 2.528 0 0 1 2.52-2.52c1.394 0 2.523 1.126 2.523 2.52 0 1.393-1.13 2.52-2.523 2.52h-2.52v-2.52zm0 3.792a2.528 2.528 0 0 1 2.52 2.523c0 1.394-1.126 2.52-2.52 2.52h-6.315V8.834h6.315zm0 6.333a2.528 2.528 0 0 1 2.523 2.52c0 1.394-1.13 2.523-2.523 2.523-1.394 0-2.52-1.13-2.52-2.523v-2.52h2.52zm-3.792 0a2.528 2.528 0 0 1-2.523 2.52c-1.393 0-2.52-1.13-2.52-2.523V8.834h5.043v6.331z"/>
+          </svg>
+        </div>
+        <div>
+          <div class="brand-title">SlackOps <span>AI</span></div>
+        </div>
+      </a>
+
+      <!-- Navigation Links -->
+      <nav class="nav-links">
+        <a href="#capabilities-guide" class="nav-link">
+          <span>📖</span> User Guide & Tools
+        </a>
+        <a href="#how-it-works" class="nav-link">
+          <span>⚡</span> How It Works
+        </a>
+        <a href="#card-test-playground" class="nav-link" id="nav-link-playground" style="display: none;">
+          <span>🧪</span> Live Playground
+        </a>
+      </nav>
+
+      <div class="header-actions">
+        <!-- Dynamic header: either Add to Slack or Session User Badge & Sign Out -->
+        <div id="nav-unauthenticated">
+          <a href="/slack/install" class="btn btn-slack">
+            <svg viewBox="0 0 24 24" fill="currentColor">
+              <path d="M5.042 15.165a2.528 2.528 0 0 1-2.52-2.523c0-1.393 1.127-2.52 2.52-2.52h2.52v2.52c0 1.394-1.127 2.523-2.52 2.523zm0-8.835a2.528 2.528 0 0 1-2.52-2.52c0-1.394 1.13-2.523 2.52-2.523 1.393 0 2.52 1.13 2.52 2.523v2.52H5.042zm3.792 0a2.528 2.528 0 0 1 2.523-2.52c1.394 0 2.52 1.13 2.52 2.523v6.315H8.834V6.33zM15.15 5.042a2.528 2.528 0 0 1 2.52-2.52c1.394 0 2.523 1.126 2.523 2.52 0 1.393-1.13 2.52-2.523 2.52h-2.52v-2.52zm0 3.792a2.528 2.528 0 0 1 2.52 2.523c0 1.394-1.126 2.52-2.52 2.52h-6.315V8.834h6.315zm0 6.333a2.528 2.528 0 0 1 2.523 2.52c0 1.394-1.13 2.523-2.523 2.523-1.394 0-2.52-1.13-2.52-2.523v-2.52h2.52zm-3.792 0a2.528 2.528 0 0 1-2.523 2.52c-1.393 0-2.52-1.13-2.52-2.523V8.834h5.043v6.331z"/>
+            </svg>
+            Add to Slack
+          </a>
+        </div>
+
+        <div id="nav-authenticated" style="display: none; align-items: center; gap: 12px;">
+          <div class="session-badge">
+            <span>Workspace: <strong id="nav-workspace-name">Workspace</strong></span>
+          </div>
+          <button onclick="logout()" class="btn btn-outline" style="padding: 6px 14px; font-size: 0.85rem;">
+            Sign Out
+          </button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <main class="container">
+
+    <!-- Global Notification Banners -->
+    <div id="banner-success" class="banner success" style="display: none;">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg>
+      <span id="banner-success-text"></span>
+    </div>
+
+    <div id="banner-error" class="banner error" style="display: none;">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+      <span id="banner-error-text"></span>
+    </div>
+
+    <!-- ==================================================== -->
+    <!-- VIEW 1: PUBLIC VISITOR LANDING PAGE (UNAUTHENTICATED) -->
+    <!-- ==================================================== -->
+    <div id="view-landing">
+      <section class="hero">
+        <div class="hero-badge">
+          <span>🔒 Privacy-First Multi-Tenant AI Assistant</span>
+        </div>
+        <h1>Enterprise Slack AI<br><span>With Isolated Calendar & Gmail</span></h1>
+        <p>
+          Connect any Slack workspace with one click. Add the bot to any channel or DM.
+          Each teammate connects their personal Google account with strict multi-tenant data isolation.
+        </p>
+        
+        <div class="hero-cta">
+          <a href="/slack/install" class="btn btn-slack" style="padding: 14px 32px; font-size: 1.05rem;">
+            <svg viewBox="0 0 24 24" fill="currentColor" style="width:24px;height:24px;">
+              <path d="M5.042 15.165a2.528 2.528 0 0 1-2.52-2.523c0-1.393 1.127-2.52 2.52-2.52h2.52v2.52c0 1.394-1.127 2.523-2.52 2.523zm0-8.835a2.528 2.528 0 0 1-2.52-2.52c0-1.394 1.13-2.523 2.52-2.523 1.393 0 2.52 1.13 2.52 2.523v2.52H5.042zm3.792 0a2.528 2.528 0 0 1 2.523-2.52c1.394 0 2.52 1.13 2.52 2.523v6.315H8.834V6.33zM15.15 5.042a2.528 2.528 0 0 1 2.52-2.52c1.394 0 2.523 1.126 2.523 2.52 0 1.393-1.13 2.52-2.523 2.52h-2.52v-2.52zm0 3.792a2.528 2.528 0 0 1 2.52 2.523c0 1.394-1.126 2.52-2.52 2.52h-6.315V8.834h6.315zm0 6.333a2.528 2.528 0 0 1 2.523 2.52c0 1.394-1.13 2.523-2.523 2.523-1.394 0-2.52-1.13-2.52-2.523v-2.52h2.52zm-3.792 0a2.528 2.528 0 0 1-2.523 2.52c-1.393 0-2.52-1.13-2.52-2.523V8.834h5.043v6.331z"/>
+            </svg>
+            Add to Slack
+          </a>
+          <a href="#capabilities-guide" class="btn btn-outline" style="padding: 14px 28px; font-size: 1rem;">
+            Explore What Bot Can Do
+          </a>
+        </div>
+      </section>
+
+      <!-- Key Privacy & Features Grid -->
+      <div class="features-grid">
+        <div class="feature-card">
+          <div class="feature-icon" style="background: rgba(99, 102, 241, 0.15); color: #818cf8;">🚀</div>
+          <h3 class="feature-title">Any Workspace & Channel</h3>
+          <p class="feature-desc">
+            Instantly install to any Slack organization. Invite the bot to any channel with <code>/invite @myagent</code> or talk in private direct messages.
+          </p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon" style="background: rgba(54, 197, 240, 0.15); color: #36c5f0;">📅</div>
+          <h3 class="feature-title">Personal Google Calendar</h3>
+          <p class="feature-desc">
+            Schedule meetings, check upcoming agendas, and resolve conflicts. Your personal calendar is only accessible to you.
+          </p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon" style="background: rgba(224, 30, 90, 0.15); color: #e01e5a;">✉️</div>
+          <h3 class="feature-title">Personal Gmail Intelligence</h3>
+          <p class="feature-desc">
+            Search unread emails, summarize priority threads, and compose draft replies directly in Slack without switching tabs.
+          </p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon" style="background: rgba(16, 185, 129, 0.15); color: #10b981;">🛡️</div>
+          <h3 class="feature-title">Strict Multi-Tenant Isolation</h3>
+          <p class="feature-desc">
+            PostgreSQL pgvector conversations and Google credentials are strictly partitioned. Teammates cannot read or search each other's data.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================================================== -->
+    <!-- VIEW 2: AUTHENTICATED USER DASHBOARD (PRIVATE) -->
+    <!-- ==================================================== -->
+    <div id="view-dashboard" style="display: none;">
+
+      <!-- Slack Channel Guide Banner -->
+      <div class="slack-invite-guide" style="margin-top: 32px;">
+        <svg viewBox="0 0 24 24" fill="currentColor">
+          <path d="M5.042 15.165a2.528 2.528 0 0 1-2.52-2.523c0-1.393 1.127-2.52 2.52-2.52h2.52v2.52c0 1.394-1.127 2.523-2.52 2.523zm0-8.835a2.528 2.528 0 0 1-2.52-2.52c0-1.394 1.13-2.523 2.52-2.523 1.393 0 2.52 1.13 2.52 2.523v2.52H5.042zm3.792 0a2.528 2.528 0 0 1 2.523-2.52c1.394 0 2.52 1.13 2.52 2.523v6.315H8.834V6.33zM15.15 5.042a2.528 2.528 0 0 1 2.52-2.52c1.394 0 2.523 1.126 2.523 2.52 0 1.393-1.13 2.52-2.523 2.52h-2.52v-2.52zm0 3.792a2.528 2.528 0 0 1 2.52 2.523c0 1.394-1.126 2.52-2.52 2.52h-6.315V8.834h6.315zm0 6.333a2.528 2.528 0 0 1 2.523 2.52c0 1.394-1.13 2.523-2.523 2.523-1.394 0-2.52-1.13-2.52-2.523v-2.52h2.52zm-3.792 0a2.528 2.528 0 0 1-2.523 2.52c-1.393 0-2.52-1.13-2.52-2.523V8.834h5.043v6.331z"/>
+        </svg>
+        <div>
+          <h4>Add Bot to Any Channel in Your Workspace</h4>
+          <p>
+            Your AI assistant is active! Type <code>/invite @myagent</code> in any channel or mention <code>@myagent</code> with your query. The bot automatically joins and assists immediately.
+          </p>
+        </div>
+      </div>
+
+      <div class="dashboard-grid">
+
+        <!-- Workspace Overview Card -->
+        <div class="card" id="card-workspace-overview">
+          <div class="card-header">
+            <div class="card-title-group">
+              <h2 class="card-title" id="display-team-name">Workspace</h2>
+              <span class="status-badge live" id="workspace-status-badge">Bot Active</span>
+            </div>
+            <div>
+              <span id="display-installed-at" style="font-size: 0.85rem; color: var(--text-dim);">Installed Recently</span>
+            </div>
+          </div>
+
+          <div class="workspace-details">
+            <div class="detail-item">
+              <span class="detail-label">Team ID</span>
+              <span class="detail-val" id="detail-team-id">—</span>
+            </div>
+            <div class="detail-item">
+              <span class="detail-label">Logged In User</span>
+              <span class="detail-val" id="detail-user-id">—</span>
+            </div>
+            <div class="detail-item">
+              <span class="detail-label">Bot User ID</span>
+              <span class="detail-val" id="detail-bot-id">—</span>
+            </div>
+            <div class="detail-item">
+              <span class="detail-label">Personal Google</span>
+              <span class="detail-val" id="detail-google-email">Not Connected</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Personal Google Account Integration Card -->
+        <div class="card" id="card-google-integration">
+          <div class="google-connect-box">
+            <div class="google-info">
+              <div class="google-logo-box">
+                <svg viewBox="0 0 24 24">
+                  <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                  <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                  <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
+                  <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
+                </svg>
+              </div>
+              <div class="google-text">
+                <h4 id="google-status-title">Personal Google Account</h4>
+                <p id="google-status-desc">Connect your Google account to grant Calendar and Gmail tool access to the AI for your Slack user identity.</p>
+              </div>
+            </div>
+
+            <div id="google-actions">
+              <button id="btn-connect-google" onclick="startGoogleAuth()" class="btn btn-primary">
+                Connect Google Account
+              </button>
+              <button id="btn-disconnect-google" onclick="disconnectGoogle()" class="btn btn-danger-outline" style="display:none;">
+                Disconnect
+              </button>
+            </div>
+          </div>
+
+          <!-- Tools Subgrid -->
+          <h3 style="font-size: 1.15rem; margin-bottom: 14px; font-weight: 700;">Workspace Tool Permissions</h3>
+          <p style="font-size: 0.9rem; color: var(--text-muted); margin-bottom: 18px;">
+            The AI only triggers tools that are toggled on. Calls will execute strictly using your personal credentials.
+          </p>
+
+          <div class="tools-grid">
+
+            <!-- Google Calendar Tool Card -->
+            <div class="tool-card" id="card-tool-calendar">
+              <div>
+                <div class="tool-top">
+                  <div class="tool-icon calendar">📅</div>
+                  <span class="status-badge" id="badge-tool-calendar">Loading</span>
+                </div>
+                <h4 class="tool-title">Google Calendar</h4>
+                <p class="tool-desc">Allows the AI to schedule events, retrieve agendas, and check upcoming meetings in your primary calendar.</p>
+                <ul class="tool-features">
+                  <li>Check upcoming agenda (<code>list_calendar_events</code>)</li>
+                  <li>Schedule appointments (<code>create_calendar_event</code>)</li>
+                  <li>Search meetings (<code>search_calendar_events</code>)</li>
+                </ul>
+              </div>
+              <div class="toggle-wrapper">
+                <span class="toggle-label">Active in Workspace</span>
+                <label class="switch" for="toggle-calendar">
+                  <input type="checkbox" id="toggle-calendar" onchange="onToolToggleChange('calendar')">
+                  <span class="slider"></span>
+                </label>
+              </div>
+            </div>
+
+            <!-- Gmail Tool Card -->
+            <div class="tool-card" id="card-tool-email">
+              <div>
+                <div class="tool-top">
+                  <div class="tool-icon email">✉️</div>
+                  <span class="status-badge" id="badge-tool-email">Loading</span>
+                </div>
+                <h4 class="tool-title">Gmail / Email</h4>
+                <p class="tool-desc">Enables the AI to read unread emails, search inbox threads, and compose automated message replies.</p>
+                <ul class="tool-features">
+                  <li>Search emails (<code>search_emails</code>)</li>
+                  <li>Fetch unread emails (<code>get_unread_emails</code>)</li>
+                  <li>Read message content & send emails (<code>send_email</code>)</li>
+                </ul>
+              </div>
+              <div class="toggle-wrapper">
+                <span class="toggle-label">Active in Workspace</span>
+                <label class="switch" for="toggle-email">
+                  <input type="checkbox" id="toggle-email" onchange="onToolToggleChange('email')">
+                  <span class="slider"></span>
+                </label>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- Live Isolated Playground -->
+        <div class="card" id="card-test-playground">
+          <div class="card-header">
+            <div class="card-title-group">
+              <h3 class="card-title">🧪 Isolated AI Test Playground</h3>
+            </div>
+            <span style="font-size:0.85rem; color:var(--text-muted);">Runs strictly under your personal context</span>
+          </div>
+          <p style="font-size:0.9rem; color:var(--text-muted); margin-bottom:12px;">
+            Test queries right here. The AI will access only your authenticated Google Calendar and Gmail tools.
+            <em>Tip: Click any example prompt from the guide below to paste it directly here!</em>
+          </p>
+
+          <div class="chat-console">
+            <div class="chat-header">
+              <h4><span>🤖</span> AI Response Preview</h4>
+              <span id="chat-tools-preview" style="font-size: 0.8rem; color: var(--text-dim);">Tools: [calendar, email]</span>
+            </div>
+            <div class="chat-body" id="chat-output">Ready for testing. Try: "What meetings do I have scheduled today?" or "Summarize unread emails".</div>
+            <div class="chat-input-bar">
+              <input type="text" id="test-chat-input" placeholder="Type a test query (e.g., 'What is on my calendar today?')..." onkeydown="if(event.key==='Enter') sendTestChat()">
+              <button id="btn-send-test-chat" class="btn btn-primary" onclick="sendTestChat()">Send</button>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ==================================================== -->
+    <!-- SECTION 3: USER GUIDE & CAPABILITIES DOCUMENTATION   -->
+    <!-- (Accessible to both Public Visitors & Authenticated) -->
+    <!-- ==================================================== -->
+    <section class="guide-section-wrapper" id="capabilities-guide">
+      <div class="section-header">
+        <div class="section-badge">
+          <span>📖 User Documentation & Capabilities</span>
+        </div>
+        <h2 class="section-title">Everything SlackOps AI Can Do For You</h2>
+        <p class="section-subtitle">
+          No complicated setup or technical background needed. Here is a friendly breakdown of how your AI assistant works in Slack, what superpowers it has, and real example prompts you can use right away.
+        </p>
+      </div>
+
+      <!-- Category Filter Tabs -->
+      <div class="filter-tabs">
+        <button class="tab-btn active" onclick="filterCapabilities('all', this)">🌟 All Capabilities</button>
+        <button class="tab-btn" onclick="filterCapabilities('calendar', this)">📅 Calendar & Meetings</button>
+        <button class="tab-btn" onclick="filterCapabilities('email', this)">✉️ Gmail & Inbox</button>
+        <button class="tab-btn" onclick="filterCapabilities('memory', this)">🧠 Slack Team Memory</button>
+        <button class="tab-btn" onclick="filterCapabilities('timers', this)">⏱️ Timers & Reminders</button>
+        <button class="tab-btn" onclick="filterCapabilities('privacy', this)">🔒 Privacy & Isolation</button>
+      </div>
+
+      <!-- Capabilities Detailed Cards Grid -->
+      <div class="capabilities-grid">
+
+        <!-- 1. Calendar Capability -->
+        <div class="cap-card" data-category="calendar">
+          <div class="cap-card-top">
+            <div class="cap-header">
+              <div class="cap-icon-box" style="background: rgba(54, 197, 240, 0.15); color: #36c5f0;">📅</div>
+              <span class="badge-tag personal">Personal & Private</span>
+            </div>
+            <h3 class="cap-title">Smart Calendar Assistant</h3>
+            <p class="cap-what">
+              Acts like your personal executive scheduler. It knows your schedule in real time, spots conflicts, schedules new meetings, and answers questions about your upcoming day.
+            </p>
+            <div class="cap-how">
+              <strong>How it works for you:</strong> Just speak naturally. Say things like <em>"tomorrow at 3 PM"</em> or <em>"next Monday"</em>. The AI manages your Google Calendar directly and always respects your local timezone.
+            </div>
+          </div>
+          <div>
+            <div class="prompts-title">
+              <span>💡 Example Prompts</span>
+              <span style="font-size:0.75rem; text-transform:none; color:var(--text-dim);">(click to copy/try)</span>
+            </div>
+            <div class="prompt-chips">
+              <div class="prompt-chip" onclick="usePrompt('What does my schedule look like today?')">
+                <span>"What does my schedule look like today?"</span>
+                <span class="chip-action">📋 Try this</span>
+              </div>
+              <div class="prompt-chip" onclick="usePrompt('Schedule a 30-minute sync with Alex on Monday at 3 PM')">
+                <span>"Schedule a 30-minute sync with Alex on Monday at 3 PM"</span>
+                <span class="chip-action">📋 Try this</span>
+              </div>
+              <div class="prompt-chip" onclick="usePrompt('Do I have any meetings tomorrow afternoon?')">
+                <span>"Do I have any meetings tomorrow afternoon?"</span>
+                <span class="chip-action">📋 Try this</span>
+              </div>
+              <div class="prompt-chip" onclick="usePrompt('When is my next upcoming meeting?')">
+                <span>"When is my next upcoming meeting?"</span>
+                <span class="chip-action">📋 Try this</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 2. Gmail Capability -->
+        <div class="cap-card" data-category="email">
+          <div class="cap-card-top">
+            <div class="cap-header">
+              <div class="cap-icon-box" style="background: rgba(224, 30, 90, 0.15); color: #e01e5a;">✉️</div>
+              <span class="badge-tag personal">Personal & Private</span>
+            </div>
+            <h3 class="cap-title">Gmail & Inbox Copilot</h3>
+            <p class="cap-what">
+              Stay on top of critical client and team emails without tab-switching. The AI searches your inbox, summarizes long threads, and helps compose ready-to-send draft responses.
+            </p>
+            <div class="cap-how">
+              <strong>How it works for you:</strong> Connect your personal Gmail with one click. When you ask about your emails, the AI securely checks your inbox under your identity. No other teammate can view your emails.
+            </div>
+          </div>
+          <div>
+            <div class="prompts-title">
+              <span>💡 Example Prompts</span>
+              <span style="font-size:0.75rem; text-transform:none; color:var(--text-dim);">(click to copy/try)</span>
+            </div>
+            <div class="prompt-chips">
+              <div class="prompt-chip" onclick="usePrompt('Summarize my unread emails from today')">
+                <span>"Summarize my unread emails from today"</span>
+                <span class="chip-action">📋 Try this</span>
+              </div>
+              <div class="prompt-chip" onclick="usePrompt('Search my emails for updates from AWS or GitHub')">
+                <span>"Search my emails for updates from AWS or GitHub"</span>
+                <span class="chip-action">📋 Try this</span>
+              </div>
+              <div class="prompt-chip" onclick="usePrompt('Did anyone email me about the project proposal?')">
+                <span>"Did anyone email me about the project proposal?"</span>
+                <span class="chip-action">📋 Try this</span>
+              </div>
+              <div class="prompt-chip" onclick="usePrompt('Draft a quick thank you reply confirming the meeting time')">
+                <span>"Draft a quick thank you reply confirming the meeting time"</span>
+                <span class="chip-action">📋 Try this</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 3. Slack Team Memory Capability -->
+        <div class="cap-card" data-category="memory">
+          <div class="cap-card-top">
+            <div class="cap-header">
+              <div class="cap-icon-box" style="background: rgba(168, 85, 247, 0.15); color: #c084fc;">🧠</div>
+              <span class="badge-tag team">Workspace & Channels</span>
+            </div>
+            <h3 class="cap-title">Team Context & Channel Memory</h3>
+            <p class="cap-what">
+              Never lose track of past decisions, agreed deadlines, or shared documents. The AI recalls discussions from your Slack channels and thread histories.
+            </p>
+            <div class="cap-how">
+              <strong>How it works for you:</strong> Whenever the bot participates in a channel or thread, it organizes discussion topics into isolated team memory. Just ask what was decided, and it recaps the key highlights.
+            </div>
+          </div>
+          <div>
+            <div class="prompts-title">
+              <span>💡 Example Prompts</span>
+              <span style="font-size:0.75rem; text-transform:none; color:var(--text-dim);">(click to copy/try)</span>
+            </div>
+            <div class="prompt-chips">
+              <div class="prompt-chip" onclick="usePrompt('What did the team decide about the launch schedule?')">
+                <span>"What did the team decide about the launch schedule?"</span>
+                <span class="chip-action">📋 Try this</span>
+              </div>
+              <div class="prompt-chip" onclick="usePrompt('Recap the main points discussed in this thread')">
+                <span>"Recap the main points discussed in this thread"</span>
+                <span class="chip-action">📋 Try this</span>
+              </div>
+              <div class="prompt-chip" onclick="usePrompt('Who agreed to handle the client presentation?')">
+                <span>"Who agreed to handle the client presentation?"</span>
+                <span class="chip-action">📋 Try this</span>
+              </div>
+              <div class="prompt-chip" onclick="usePrompt('Where is the link to the design mockup we talked about?')">
+                <span>"Where is the link to the design mockup we talked about?"</span>
+                <span class="chip-action">📋 Try this</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 4. Timers & Productivity Capability -->
+        <div class="cap-card" data-category="timers">
+          <div class="cap-card-top">
+            <div class="cap-header">
+              <div class="cap-icon-box" style="background: rgba(245, 158, 11, 0.15); color: #fbbf24;">⏱️</div>
+              <span class="badge-tag auto">Automated Productivity</span>
+            </div>
+            <h3 class="cap-title">Focus Timers & Proactive Reminders</h3>
+            <p class="cap-what">
+              Protect your focus during deep work sessions. Ask the AI to set timers, track reminders, or proactively alert you before upcoming calendar events start.
+            </p>
+            <div class="cap-how">
+              <strong>How it works for you:</strong> Timers run quietly in the background. When your timer concludes or when an event is 30 minutes away, the bot sends you a gentle notification right in Slack.
+            </div>
+          </div>
+          <div>
+            <div class="prompts-title">
+              <span>💡 Example Prompts</span>
+              <span style="font-size:0.75rem; text-transform:none; color:var(--text-dim);">(click to copy/try)</span>
+            </div>
+            <div class="prompt-chips">
+              <div class="prompt-chip" onclick="usePrompt('Set a timer for 25 minutes for focused coding')">
+                <span>"Set a timer for 25 minutes for focused coding"</span>
+                <span class="chip-action">📋 Try this</span>
+              </div>
+              <div class="prompt-chip" onclick="usePrompt('Remind me to follow up with John in 15 minutes')">
+                <span>"Remind me to follow up with John in 15 minutes"</span>
+                <span class="chip-action">📋 Try this</span>
+              </div>
+              <div class="prompt-chip" onclick="usePrompt('Show all my active timers')">
+                <span>"Show all my active timers"</span>
+                <span class="chip-action">📋 Try this</span>
+              </div>
+              <div class="prompt-chip" onclick="usePrompt('Cancel my active timer')">
+                <span>"Cancel my active timer"</span>
+                <span class="chip-action">📋 Try this</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 5. Privacy & User Isolation -->
+        <div class="cap-card" data-category="privacy">
+          <div class="cap-card-top">
+            <div class="cap-header">
+              <div class="cap-icon-box" style="background: rgba(16, 185, 129, 0.15); color: #10b981;">🛡️</div>
+              <span class="badge-tag privacy">Strict Data Privacy</span>
+            </div>
+            <h3 class="cap-title">Strict User & Data Isolation</h3>
+            <p class="cap-what">
+              Enterprise security with zero data leakage. Your personal schedule, emails, and conversations are never shared with other team members or workspaces.
+            </p>
+            <div class="cap-how">
+              <strong>How it works for you:</strong> When User A asks about their calendar in a public channel, the AI only reads User A's calendar. User B cannot access User A's data, and each tenant operates in a walled database partition.
+            </div>
+          </div>
+          <div>
+            <div class="prompts-title">
+              <span>🔒 Privacy Guarantees</span>
+            </div>
+            <ul class="tool-features" style="margin-bottom:0;">
+              <li>Per-user Google OAuth credentials strictly linked to your Slack User ID</li>
+              <li>Encrypted PostgreSQL storage with tenant-isolated database keys</li>
+              <li>Zero cross-workspace data access or public workspace directory leaks</li>
+              <li>Your conversations and emails are never used to train public AI models</li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- 6. Quick Start Slack Guide -->
+        <div class="cap-card" data-category="all">
+          <div class="cap-card-top">
+            <div class="cap-header">
+              <div class="cap-icon-box" style="background: rgba(74, 21, 75, 0.25); color: #e01e5a;">💬</div>
+              <span class="badge-tag team">Quick-Start Guide</span>
+            </div>
+            <h3 class="cap-title">How to Talk to the Bot in Slack</h3>
+            <p class="cap-what">
+              Interacting with your AI assistant is seamless and takes zero training. Use it across your daily workflow in 3 simple ways:
+            </p>
+            <div class="cap-how">
+              <strong>1. In Any Channel:</strong> Type <code>/invite @myagent</code> to bring the bot into any channel. Mention <code>@myagent</code> with your question and it will respond directly in thread or channel.
+            </div>
+            <div class="cap-how" style="margin-bottom: 0;">
+              <strong>2. In Private Direct Messages:</strong> Send a 1-on-1 DM to the bot anytime for private calendar checks, email searches, and confidential task assistance.
+            </div>
+          </div>
+          <div>
+            <div class="prompts-title">
+              <span>💬 Thread Interactions</span>
+            </div>
+            <div class="cap-how" style="margin-bottom:0; background:rgba(255,255,255,0.02);">
+              <strong>3. Inside Message Threads:</strong> Mention <code>@myagent</code> inside any ongoing thread. The bot automatically digests previous replies in the thread to give context-aware responses without spamming the main channel.
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- Step by Step Setup Guide (How it works anchor) -->
+    <div class="guide-card" id="how-it-works">
+      <div class="guide-title">
+        <span>⚡</span> Simple 3-Step Setup Guide
+      </div>
+      <div class="steps-list">
+        <div class="step-item">
+          <div class="step-num">1</div>
+          <div class="step-text">
+            <h4>Install Bot to Slack</h4>
+            <p>Click "Add to Slack" to authorize the AI assistant for your team. Works for any Slack workspace with one click.</p>
+          </div>
+        </div>
+        <div class="step-item">
+          <div class="step-num">2</div>
+          <div class="step-text">
+            <h4>Link Personal Google Tools</h4>
+            <p>Sign in with your Google account to grant Calendar and Gmail access. Your data remains completely private to you.</p>
+          </div>
+        </div>
+        <div class="step-item">
+          <div class="step-num">3</div>
+          <div class="step-text">
+            <h4>Invite & Start Chatting</h4>
+            <p>In Slack, invite the bot to any channel using <code>/invite @myagent</code> or send a DM to start scheduling and summarizing.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Footer -->
+  <footer>
+    <div class="container">
+      <p>SlackOps AI &copy; 2026. Enterprise Multi-Tenant AI Platform with End-to-End Privacy.</p>
+      <p style="margin-top: 6px;">
+        OAuth Callback: <code>/slack/oauth/callback</code> | Events Webhook: <code>/slack/events</code> | Google Calendar & Gmail Integration
+      </p>
+    </div>
+  </footer>
+
+  <!-- Client Logic -->
+  <script>
+    let currentUserData = null;
+
+    function showToast(message) {
+      const toast = document.getElementById("toast");
+      const msg = document.getElementById("toast-message");
+      msg.textContent = message;
+      toast.style.display = "flex";
+      setTimeout(() => {
+        toast.style.display = "none";
+      }, 3500);
+    }
+
+    function checkUrlParams() {
+      const urlParams = new URLSearchParams(window.location.search);
+      const installed = urlParams.get("installed");
+      const googleConnected = urlParams.get("google_connected");
+      const err = urlParams.get("error");
+
+      if (installed === "true") {
+        const banner = document.getElementById("banner-success");
+        document.getElementById("banner-success-text").textContent = 
+          "🎉 Workspace connected successfully! Connect your personal Google account below.";
+        banner.classList.add("visible");
+        banner.style.display = "flex";
+        showToast("Slack workspace added successfully!");
+      }
+
+      if (googleConnected === "true") {
+        const banner = document.getElementById("banner-success");
+        document.getElementById("banner-success-text").textContent = 
+          "✅ Your Google account is authenticated! Calendar and Gmail are ready.";
+        banner.classList.add("visible");
+        banner.style.display = "flex";
+        showToast("Google account linked successfully!");
+      }
+
+      if (err) {
+        const banner = document.getElementById("banner-error");
+        document.getElementById("banner-error-text").textContent = `Error: ${err}`;
+        banner.classList.add("visible");
+        banner.style.display = "flex";
+      }
+    }
+
+    async function loadUserProfile() {
+      try {
+        const urlParams = new URLSearchParams(window.location.search);
+        const paramTeamId = urlParams.get("team_id");
+        const fetchUrl = paramTeamId ? `/api/me?team_id=${encodeURIComponent(paramTeamId)}` : "/api/me";
+
+        const res = await fetch(fetchUrl);
+        const data = await res.json();
+
+        if (data && data.authenticated) {
+          currentUserData = data;
+          showDashboardView(data);
+        } else {
+          showLandingView();
+        }
+      } catch (e) {
+        console.error("Error loading user profile:", e);
+        showLandingView();
+      }
+    }
+
+    function showLandingView() {
+      document.getElementById("view-landing").style.display = "block";
+      document.getElementById("view-dashboard").style.display = "none";
+      document.getElementById("nav-unauthenticated").style.display = "flex";
+      document.getElementById("nav-authenticated").style.display = "none";
+      const pgLink = document.getElementById("nav-link-playground");
+      if (pgLink) pgLink.style.display = "none";
+    }
+
+    function showDashboardView(user) {
+      document.getElementById("view-landing").style.display = "none";
+      document.getElementById("view-dashboard").style.display = "block";
+      document.getElementById("nav-unauthenticated").style.display = "none";
+      document.getElementById("nav-authenticated").style.display = "flex";
+      const pgLink = document.getElementById("nav-link-playground");
+      if (pgLink) pgLink.style.display = "flex";
+
+      document.getElementById("nav-workspace-name").textContent = user.team_name || "Workspace";
+      document.getElementById("display-team-name").textContent = user.team_name || "Workspace";
+      document.getElementById("detail-team-id").textContent = user.team_id || "—";
+      document.getElementById("detail-user-id").textContent = user.user_id || "—";
+      document.getElementById("detail-bot-id").textContent = user.bot_user_id || "Bot Active";
+      document.getElementById("display-installed-at").textContent = user.installed_at 
+        ? `Installed ${new Date(user.installed_at).toLocaleDateString()}` 
+        : "Installed";
+
+      const enabled = user.enabled_tools || ["calendar", "email"];
+      const isGoogleConnected = Boolean(user.google_connected);
+      const googleEmail = user.google_user_email || (isGoogleConnected ? "Connected" : "Not Connected");
+      document.getElementById("detail-google-email").textContent = googleEmail;
+
+      const gTitle = document.getElementById("google-status-title");
+      const gDesc = document.getElementById("google-status-desc");
+      const btnConnect = document.getElementById("btn-connect-google");
+      const btnDisconnect = document.getElementById("btn-disconnect-google");
+
+      if (isGoogleConnected) {
+        gTitle.textContent = `Connected: ${googleEmail}`;
+        gDesc.textContent = "Your personal Google Calendar and Gmail tools are active and authenticating your queries.";
+        btnConnect.textContent = "Re-authenticate";
+        btnConnect.className = "btn btn-outline";
+        btnDisconnect.style.display = "inline-flex";
+      } else {
+        gTitle.textContent = "Personal Google Account";
+        gDesc.textContent = "Connect your Google account to grant Calendar and Gmail tool access to the AI for your user identity.";
+        btnConnect.textContent = "Connect Google Account";
+        btnConnect.className = "btn btn-primary";
+        btnDisconnect.style.display = "none";
+      }
+
+      updateToolCard("calendar", enabled.includes("calendar"), isGoogleConnected);
+      updateToolCard("email", enabled.includes("email") || enabled.includes("gmail"), isGoogleConnected);
+      document.getElementById("chat-tools-preview").textContent = `Active Tools: [${enabled.join(", ")}]`;
+    }
+
+    function updateToolCard(toolId, isEnabled, isGoogleConnected) {
+      const toggle = document.getElementById(`toggle-${toolId}`);
+      const badge = document.getElementById(`badge-tool-${toolId}`);
+
+      if (toggle) toggle.checked = isEnabled;
+
+      if (badge) {
+        if (isEnabled && isGoogleConnected) {
+          badge.className = "status-badge live";
+          badge.textContent = "Enabled & Connected";
+        } else if (isEnabled && !isGoogleConnected) {
+          badge.className = "status-badge warning";
+          badge.textContent = "Needs Google Auth";
+        } else {
+          badge.className = "status-badge inactive";
+          badge.textContent = "Disabled";
+        }
+      }
+    }
+
+    async function onToolToggleChange(toolName) {
+      if (!currentUserData) return;
+
+      const enabled = [];
+      if (document.getElementById("toggle-calendar").checked) enabled.push("calendar");
+      if (document.getElementById("toggle-email").checked) enabled.push("email");
+
+      try {
+        const res = await fetch("/api/me/tools", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ enabled_tools: enabled }),
+        });
+        const data = await res.json();
+        if (data.ok) {
+          currentUserData.enabled_tools = enabled;
+          showDashboardView(currentUserData);
+          showToast(`Updated tools for ${currentUserData.team_name}`);
+        }
+      } catch (e) {
+        console.error("Error toggling tool:", e);
+        showToast("Error updating workspace tools");
+      }
+    }
+
+    function startGoogleAuth() {
+      const teamId = currentUserData ? currentUserData.team_id : "default";
+      const userId = currentUserData ? currentUserData.user_id : "default";
+      window.location.href = `/auth/google/start?team_id=${encodeURIComponent(teamId)}&user_id=${encodeURIComponent(userId)}`;
+    }
+
+    async function disconnectGoogle() {
+      if (!confirm("Are you sure you want to disconnect your personal Google account?")) {
+        return;
+      }
+      try {
+        const res = await fetch("/api/me/disconnect-google", { method: "POST" });
+        const data = await res.json();
+        if (data.ok) {
+          showToast("Personal Google account disconnected");
+          await loadUserProfile();
+        }
+      } catch (e) {
+        console.error("Error disconnecting Google:", e);
+      }
+    }
+
+    async function logout() {
+      try {
+        await fetch("/api/me/logout", { method: "POST" });
+        window.location.href = "/";
+      } catch (e) {
+        window.location.href = "/";
+      }
+    }
+
+    async function sendTestChat() {
+      const input = document.getElementById("test-chat-input");
+      const output = document.getElementById("chat-output");
+      const btn = document.getElementById("btn-send-test-chat");
+      const msg = input.value.trim();
+      if (!msg) return;
+
+      output.textContent = `User: ${msg}\n\nEvaluating personal tools and executing...`;
+      btn.disabled = true;
+
+      try {
+        const res = await fetch("/api/me/test-chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message: msg }),
+        });
+        const data = await res.json();
+        output.textContent = `User: ${msg}\n\nAI Assistant:\n${data.reply}`;
+      } catch (e) {
+        output.textContent = `Error: ${e.message}`;
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    // Filter Capabilities Category
+    function filterCapabilities(category, btnElement) {
+      document.querySelectorAll(".tab-btn").forEach(btn => btn.classList.remove("active"));
+      if (btnElement) btnElement.classList.add("active");
+
+      const cards = document.querySelectorAll(".cap-card");
+      cards.forEach(card => {
+        const cardCat = card.getAttribute("data-category");
+        if (category === "all" || cardCat === category || cardCat === "all") {
+          card.style.display = "flex";
+        } else {
+          card.style.display = "none";
+        }
+      });
+    }
+
+    // Interactive Prompt Chip Click Handler
+    function usePrompt(text) {
+      const input = document.getElementById("test-chat-input");
+      if (input) {
+        input.value = text;
+        input.focus();
+      }
+
+      // Copy text to clipboard
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).catch(() => {});
+      }
+
+      showToast(`Prompt loaded: "${text}"`);
+
+      // If user is authenticated, scroll to playground
+      const playground = document.getElementById("card-test-playground");
+      if (playground && playground.offsetParent !== null) {
+        playground.scrollIntoView({ behavior: "smooth" });
+      }
+    }
+
+    window.addEventListener("DOMContentLoaded", () => {
+      checkUrlParams();
+      loadUserProfile();
+    });
+  </script>
+</body>
+</html>

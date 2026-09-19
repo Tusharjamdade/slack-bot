@@ -5,35 +5,36 @@ from typing import Optional, List, Dict, Any
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
-from app.services.google.auth import get_google_credentials
+from app.services.google.auth import get_google_credentials, get_google_auth_link_for_current_user
 
 logger = logging.getLogger(__name__)
 
 
 class GmailService:
-    """Service to interact with Gmail API."""
+    """Service to interact with Gmail API with strict per-user isolation."""
 
     def __init__(self):
-        self._service = None
+        pass
 
     def get_service(self):
         creds = get_google_credentials()
         if not creds:
+            auth_link = get_google_auth_link_for_current_user()
             raise PermissionError(
-                "Gmail is not authenticated. Please run 'python scripts/setup_google_auth.py' "
-                "or configure GOOGLE_TOKEN_FILE / GOOGLE_REFRESH_TOKEN in .env."
+                f"Your Gmail account is not connected yet. "
+                f"Please connect your personal Google account to access your emails: {auth_link}"
             )
-        if not self._service or creds.expired:
-            self._service = build("gmail", "v1", credentials=creds)
-        return self._service
+        return build("gmail", "v1", credentials=creds)
 
-    def search_messages(self, query: str = "label:INBOX", max_results: int = 5) -> List[Dict[str, Any]]:
-        """Search messages matching query and return list with summary details."""
+    def search_messages(self, query: str = "label:INBOX", max_results: int = 3) -> List[Dict[str, Any]]:
+        """Search messages matching query and return list with compact summary details."""
         service = self.get_service()
+        # Cap max_results to 5 to protect token limits
+        effective_max = min(max_results, 5)
         results = service.users().messages().list(
             userId="me",
             q=query,
-            maxResults=max_results,
+            maxResults=effective_max,
         ).execute()
 
         messages_meta = results.get("messages", [])
@@ -49,19 +50,24 @@ class GmailService:
             ).execute()
 
             headers = {h["name"]: h["value"] for h in msg_data.get("payload", {}).get("headers", [])}
+            subject = (headers.get("Subject") or "No Subject")[:70]
+            sender = (headers.get("From") or "Unknown")[:60]
+            date_str = (headers.get("Date") or "")[:25]
+            snippet = (msg_data.get("snippet") or "")[:100]
+
             messages.append({
                 "id": msg_id,
-                "thread_id": msg_data.get("threadId"),
-                "subject": headers.get("Subject", "No Subject"),
-                "from": headers.get("From", "Unknown"),
-                "date": headers.get("Date", ""),
-                "snippet": msg_data.get("snippet", ""),
+                "subject": subject,
+                "from": sender,
+                "date": date_str,
+                "snippet": snippet,
             })
 
         return messages
 
     def get_message_body(self, message_id: str) -> Dict[str, Any]:
-        """Fetch full message content for an email ID."""
+        """Fetch message content for an email ID with compact token-efficient payload."""
+        import re
         service = self.get_service()
         msg = service.users().messages().get(userId="me", id=message_id, format="full").execute()
         payload = msg.get("payload", {})
@@ -77,14 +83,24 @@ class GmailService:
             data = payload["body"]["data"]
             body_text = base64.urlsafe_b64decode(data).decode("utf-8", errors="replace")
 
+        # Strip HTML tags if plain text wasn't found or contains HTML remnants
+        clean_text = re.sub(r"<[^>]+>", " ", body_text)
+        # Collapse whitespace and empty lines
+        clean_text = re.sub(r"\s+", " ", clean_text).strip()
+
+        if not clean_text:
+            clean_text = msg.get("snippet", "")
+
+        # Hard limit body to 1200 characters (~300 tokens) to guarantee safety under 8k TPM limits
+        if len(clean_text) > 1200:
+            clean_text = clean_text[:1200] + "... [truncated for brevity]"
+
         return {
             "id": message_id,
-            "subject": headers.get("Subject", "No Subject"),
-            "from": headers.get("From", "Unknown"),
-            "to": headers.get("To", ""),
-            "date": headers.get("Date", ""),
-            "snippet": msg.get("snippet", ""),
-            "body": body_text.strip() or msg.get("snippet", ""),
+            "subject": (headers.get("Subject") or "No Subject")[:80],
+            "from": (headers.get("From") or "Unknown")[:60],
+            "date": (headers.get("Date") or "")[:30],
+            "body": clean_text,
         }
 
     def send_message(self, to: str, subject: str, body: str) -> Dict[str, Any]:
@@ -102,14 +118,13 @@ class GmailService:
 
         return {
             "id": sent.get("id"),
-            "thread_id": sent.get("threadId"),
             "status": "sent",
             "to": to,
             "subject": subject,
         }
 
-    def get_unread_messages(self, max_results: int = 5) -> List[Dict[str, Any]]:
-        """Get recent unread messages from INBOX."""
+    def get_unread_messages(self, max_results: int = 3) -> List[Dict[str, Any]]:
+        """Get recent unread messages from INBOX with compact payload."""
         return self.search_messages(query="is:unread label:INBOX", max_results=max_results)
 
 

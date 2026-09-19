@@ -34,22 +34,20 @@ CLASSIFICATION CRITERIA:
    - "Do you remember the customer's phone number?"
    - "What did we say about ECS Fargate?"
 
-3. "hybrid": The user wants to execute a tool (e.g. send email, schedule meeting, create note), BUT the details depend on past discussion.
+3. "hybrid": The user wants to execute a tool (e.g. send email, schedule meeting), BUT the details depend on past discussion.
    -> needs_history: true
    -> is_chronological: false
    -> search_query: concise keyword query
    Examples:
    - "Send an email to Alice about the bug we discussed."
    - "Schedule the meeting we talked about earlier."
-   - "Add the topics we discussed to my Keep notes."
 
-4. "direct_tool": The user provides all necessary details to perform a workspace action (Google Calendar, Gmail, Keep) right now.
+4. "direct_tool": The user provides all necessary details to perform a workspace action (Google Calendar, Gmail) right now.
    -> needs_history: false
    -> is_chronological: false
    Examples:
    - "Schedule a meeting with Bob tomorrow at 3pm."
    - "Check my unread emails."
-   - "Create a keep note titled 'Groceries' with apples and milk."
    - "Search my calendar for tomorrow's standup."
 
 5. "direct_qa": General knowledge, coding, math, explanations, greetings, or questions that don't depend on past conversation memory.
@@ -131,7 +129,6 @@ class IntentRouter:
         tool_patterns = [
             r"\b(schedule|calendar|meeting|appointment|event)\b",
             r"\b(email|gmail|inbox|unread)\b",
-            r"\b(keep|note|notes|checklist)\b",
         ]
         for pat in tool_patterns:
             if re.search(pat, msg_lower):

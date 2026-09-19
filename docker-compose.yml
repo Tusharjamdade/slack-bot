@@ -1,5 +1,7 @@
 services:
-  # Slack AI Agent Application connecting to AWS RDS PostgreSQL
+  # ==========================================================
+  # SlackOps AI Assistant Application
+  # ==========================================================
   slack-agent:
     build:
       context: .
@@ -10,13 +12,48 @@ services:
       - "8000:8000"
     env_file:
       - .env
-    volumes:
-      # Mount Google OAuth files if using file-based auth
-      - ./token.json:/app/token.json:rw
-      - ./credentials.json:/app/credentials.json:ro
+    environment:
+      - HOST=0.0.0.0
+      - PORT=8000
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-      interval: 30s
+      interval: 20s
       timeout: 5s
       retries: 3
-      start_period: 10s
+      start_period: 15s
+    networks:
+      - slackops-network
+
+  # ==========================================================
+  # Local PostgreSQL with pgvector (Optional for local dev)
+  # Run: docker compose --profile local-db up -d
+  # ==========================================================
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: slack_ai_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgrespassword
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    profiles:
+      - local-db
+    networks:
+      - slackops-network
+
+networks:
+  slackops-network:
+    driver: bridge
+
+volumes:
+  pgdata:
+    driver: local

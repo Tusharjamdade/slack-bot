@@ -1,1 +1,1 @@
-"""Google Services module (Calendar, Gmail, Keep)."""
+"""Google Services module (Calendar, Gmail)."""

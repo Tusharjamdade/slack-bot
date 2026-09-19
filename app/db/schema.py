@@ -54,6 +54,34 @@ CREATE INDEX IF NOT EXISTS idx_chat_embeddings_session ON chat_embeddings (sessi
 -- 6. HNSW vector index for high-performance cosine similarity search
 CREATE INDEX IF NOT EXISTS idx_chat_embeddings_hnsw ON chat_embeddings 
 USING hnsw (embedding vector_cosine_ops);
+
+-- 7. Multi-workspace Slack installations and tool integrations
+CREATE TABLE IF NOT EXISTS workspaces (
+    team_id TEXT PRIMARY KEY,
+    team_name TEXT NOT NULL,
+    bot_token TEXT NOT NULL,
+    bot_user_id TEXT,
+    authed_user_id TEXT,
+    scope TEXT,
+    installed_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    enabled_tools JSONB DEFAULT '["calendar", "email"]'::jsonb,
+    google_credentials JSONB DEFAULT NULL,
+    google_user_email TEXT DEFAULT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_workspaces_installed_at ON workspaces (installed_at DESC);
+
+-- 8. Per-user Google Account OAuth credentials (strictly isolated by team_id and user_id)
+CREATE TABLE IF NOT EXISTS user_google_accounts (
+    team_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    google_user_email TEXT NOT NULL,
+    google_credentials JSONB NOT NULL,
+    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (team_id, user_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_google_accounts_lookup ON user_google_accounts (team_id, user_id);
 """
 
 
@@ -79,7 +107,17 @@ async def create_schema() -> bool:
             
             # Create tables and indexes
             await conn.execute(SCHEMA_SQL)
-        logger.info("Database schema initialized successfully with pgvector support.")
+
+            # Safe column additions for multi-tenant workspace isolation
+            await conn.execute("""
+                ALTER TABLE conversations ADD COLUMN IF NOT EXISTS team_id VARCHAR(100);
+                ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS team_id VARCHAR(100);
+                ALTER TABLE chat_embeddings ADD COLUMN IF NOT EXISTS team_id VARCHAR(100);
+                CREATE INDEX IF NOT EXISTS idx_conversations_team ON conversations (team_id);
+                CREATE INDEX IF NOT EXISTS idx_chat_messages_team ON chat_messages (team_id);
+                CREATE INDEX IF NOT EXISTS idx_chat_embeddings_team ON chat_embeddings (team_id);
+            """)
+        logger.info("Database schema initialized successfully with pgvector and user isolation support.")
         return True
     except Exception as e:
         logger.error("Failed to initialize database schema: %s", e)

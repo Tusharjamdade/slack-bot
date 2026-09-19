@@ -7,55 +7,47 @@ from langchain_groq import ChatGroq
 from langchain.agents import create_agent
 
 from app.config import settings
-from app.tools import all_tools
+from app.tools import all_tools, get_tools_for_workspace
 from app.services.rag.rag_service import rag_service
 
 logger = logging.getLogger(__name__)
 
-SYSTEM_PROMPT = """You are MyAgent, an intelligent AI assistant in Slack with access to Google Workspace productivity tools and persistent conversation memory backed by PostgreSQL with pgvector.
+from datetime import datetime
 
-Capabilities:
-1. Google Calendar: Check upcoming meetings (list_calendar_events), schedule events (create_calendar_event), search appointments (search_calendar_events).
-2. Gmail: Check unread messages (get_unread_emails), search emails (search_emails), read email details (read_email_content), send emails (send_email).
-3. Google Keep: Search notes (search_keep_notes), list notes/checklists (list_keep_notes), create notes (create_keep_note), append to notes (append_to_keep_note).
-4. Chat History & Memory:
-   - View chronological past questions, messages, and conversation recap using get_recent_chat_history tool.
-   - Search previous chats, past decisions, and topics via semantic search using search_chat_history tool.
-5. Tech & General Assistance: Programming, Software Engineering, DevOps, Data Science, Productivity.
+SYSTEM_PROMPT = """You are MyAgent, an AI assistant in Slack with Google Calendar, Gmail, focus timers, and conversation memory.
 
-STRICT RESPONSE STYLE & FORMATTING RULES:
-1. Be extremely concise, crisp, and straight to the point. Aim for 1-3 sentences or short bullet points.
-2. NO fluff, greetings, conversational filler, or pleasantries (NEVER say "Sure!", "Here you go:", "Hope this helps!", "Let me know if you need anything else").
-3. SLACK FORMATTING ONLY:
-   - NEVER use double asterisks (**word**). Slack uses single asterisks (*word*) for bold text.
-   - NEVER use horizontal rule lines (---, ___, or --).
-   - NEVER use markdown heading hashtags (#, ##, ###). Use single asterisks *Heading* if a title is required.
-   - For lists, use simple bullets (- or •) without unnecessary sub-nesting.
-   - For code, use standard backticks (`code` or ```code```).
-4. When performing an action (e.g. creating an event, sending an email, adding a note), execute the tool directly and state the outcome in one line.
-5. When answering questions that reference past discussions, past questions, or previous knowledge, synthesize the provided conversation history / retrieved knowledge or use get_recent_chat_history / search_chat_history to answer accurately.
-"""
+Rules:
+1. Be extremely concise (1-3 sentences or short bullets). Never use greetings, filler, or pleasantries.
+2. Slack mrkdwn only: *bold*, `code`, - bullets. Never use **double asterisks** or markdown headings (#).
+3. Actions: Execute the required tool directly and confirm in 1 short line.
+4. Time: Use Current System Time for relative dates/times."""
+
+_HEADER_RE = re.compile(r"^#{1,6}\s*(.+)$", flags=re.MULTILINE)
+_BOLD_RE = re.compile(r"\*\*(.*?)\*\*")
+_HR_RE = re.compile(r"^[ \t]*[-*_]{3,}[ \t]*$", flags=re.MULTILINE)
+_DASH_RE = re.compile(r"(?<!-)\s*--+\s*(?!-)")
+_NEWLINES_RE = re.compile(r"\n{3,}")
 
 
 def format_for_slack(text: str) -> str:
-    """Sanitize and convert standard markdown into clean Slack mrkdwn."""
+    """Sanitize and convert standard markdown into clean Slack mrkdwn (optimized)."""
     if not text:
         return ""
 
     # Convert markdown headers (### Header) to Slack bold (*Header*)
-    text = re.sub(r"^#{1,6}\s*(.+)$", r"*\1*", text, flags=re.MULTILINE)
+    text = _HEADER_RE.sub(r"*\1*", text)
 
     # Convert double asterisks **bold** to Slack single asterisk *bold*
-    text = re.sub(r"\*\*(.*?)\*\*", r"*\1*", text)
+    text = _BOLD_RE.sub(r"*\1*", text)
 
     # Remove horizontal rules (---, ___, ***)
-    text = re.sub(r"^[ \t]*[-*_]{3,}[ \t]*$", "", text, flags=re.MULTILINE)
+    text = _HR_RE.sub("", text)
 
     # Clean up double hyphens / em-dashes into single clean dash
-    text = re.sub(r"(?<!-)\s*--+\s*(?!-)", " - ", text)
+    text = _DASH_RE.sub(" - ", text)
 
     # Collapse 3 or more newlines into double newlines
-    text = re.sub(r"\n{3,}", "\n\n", text)
+    text = _NEWLINES_RE.sub("\n\n", text)
 
     return text.strip()
 
@@ -64,7 +56,7 @@ class AgentService:
     """Service to orchestrate LangChain Groq model with Google Workspace tools and pgvector RAG."""
 
     def __init__(self):
-        self._agent = None
+        self._agents_cache: Dict[tuple, Any] = {}
         self._llm = None
 
     def _get_llm(self) -> ChatGroq:
@@ -77,19 +69,21 @@ class AgentService:
             )
         return self._llm
 
-    def get_agent(self):
-        if not self._agent:
+    def get_agent(self, enabled_tools: Optional[List[str]] = None):
+        tools = get_tools_for_workspace(enabled_tools)
+        tool_key = tuple(sorted(t.name for t in tools))
+        if tool_key not in self._agents_cache:
             llm = self._get_llm()
             try:
-                self._agent = create_agent(
+                self._agents_cache[tool_key] = create_agent(
                     model=llm,
-                    tools=all_tools,
+                    tools=tools,
                     system_prompt=SYSTEM_PROMPT,
                 )
             except Exception as e:
                 logger.error("Failed to initialize LangChain agent with tools: %s", e)
                 raise e
-        return self._agent
+        return self._agents_cache[tool_key]
 
     async def process_message(
         self,
@@ -98,12 +92,16 @@ class AgentService:
         user_id: str = "user",
         thread_ts: Optional[str] = None,
         event_id: Optional[str] = None,
+        team_id: Optional[str] = None,
+        enabled_tools: Optional[List[str]] = None,
     ) -> str:
         """
         Process incoming user message through RAG pipeline, agent, and tools.
         Stores conversation history in PostgreSQL with pgvector embeddings.
         """
-        session_id = f"{channel_id}:{thread_ts}" if thread_ts else f"{channel_id}:main"
+        # Namespace session_id with team_id for complete multi-tenant workspace isolation
+        team_prefix = f"{team_id}:" if team_id else ""
+        session_id = f"{team_prefix}{channel_id}:{thread_ts}" if thread_ts else f"{team_prefix}{channel_id}:main"
 
         # 1. Store incoming user message & compute vector embedding in background/sync
         try:
@@ -113,11 +111,12 @@ class AgentService:
                 user_id=user_id,
                 content=message,
                 metadata={"event_id": event_id, "thread_ts": thread_ts},
+                team_id=team_id,
             )
         except Exception as e:
             logger.warning("Could not persist user message to database: %s", e)
 
-        # 2. Adaptive Retrieval: Check if query requires previous knowledge
+        # 2. Adaptive Retrieval: Check if query requires previous knowledge with team_id isolation
         rag_context = ""
         task_type = "direct_qa"
         if settings.ENABLE_RAG:
@@ -126,6 +125,7 @@ class AgentService:
                     message=message,
                     channel_id=channel_id,
                     session_id=session_id,
+                    team_id=team_id,
                 )
                 task_type = rag_eval.get("task_type", "direct_qa")
                 if rag_eval.get("needs_history"):
@@ -133,69 +133,85 @@ class AgentService:
             except Exception as e:
                 logger.warning("Adaptive RAG retrieval error: %s", e)
 
-        # 3. Retrieve short-term recent conversation turns for context continuity
+        # 3. Retrieve short-term recent conversation turns for context continuity (max 3 turns, truncated)
         conversation_history: List[Dict[str, str]] = []
         try:
             recent_msgs = await rag_service.get_recent_history(
                 session_id=session_id,
                 channel_id=channel_id,
-                limit=settings.SHORT_TERM_MEMORY_LIMIT,
+                limit=min(settings.SHORT_TERM_MEMORY_LIMIT, 3),
             )
-            # Exclude current in-flight user prompt
             for msg in recent_msgs:
                 if msg.get("role") == "user" and msg.get("content", "").strip() == message.strip():
                     continue
                 role = "assistant" if msg["role"] == "assistant" else "user"
-                conversation_history.append({"role": role, "content": msg["content"]})
+                content = (msg.get("content") or "").strip()
+                # Hard limit past turns to 200 chars to conserve tokens
+                if len(content) > 200:
+                    content = content[:200] + "..."
+                conversation_history.append({"role": role, "content": content})
         except Exception as e:
             logger.warning("Could not fetch recent conversation history: %s", e)
 
-        # 4. Construct input prompt for agent
+        # 4. Construct input prompt for agent with real-time temporal grounding
+        now_str = datetime.now().strftime("%A, %B %d, %Y at %I:%M %p")
+        time_header = f"[Current System Time: {now_str}]"
+
         if rag_context:
-            augmented_content = (
-                f"{rag_context}\n\n"
-                f"User Request (incorporate the retrieved knowledge above if relevant to answer accurately):\n"
-                f"{message}"
-            )
+            augmented_content = f"{time_header}\n{rag_context}\n{message}"
         else:
-            augmented_content = message
+            augmented_content = f"{time_header}\n{message}"
 
         agent_messages = list(conversation_history)
         agent_messages.append({"role": "user", "content": augmented_content})
 
-        # 5. Invoke LangChain Agent
+        # 5. Invoke LangChain Agent with Automatic Recovery for Rate Limits
         raw_response = ""
         tool_calls_record = None
-        try:
-            agent = self.get_agent()
+        agent = self.get_agent(enabled_tools=enabled_tools)
+
+        async def _execute_agent(msgs: list) -> tuple:
             if hasattr(agent, "ainvoke"):
-                result = await agent.ainvoke({"messages": agent_messages})
+                res = await agent.ainvoke({"messages": msgs})
             else:
-                result = await asyncio.to_thread(agent.invoke, {"messages": agent_messages})
+                res = await asyncio.to_thread(agent.invoke, {"messages": msgs})
 
-            messages = result.get("messages", [])
-            if messages:
-                last_msg = messages[-1]
-                content = last_msg.content
-                if isinstance(content, list):
-                    text_parts = [part.get("text", "") for part in content if isinstance(part, dict)]
-                    raw_response = "\n".join(text_parts).strip() or str(content)
+            resp_text = ""
+            tc_record = None
+            out_messages = res.get("messages", [])
+            if out_messages:
+                last_m = out_messages[-1]
+                cnt = last_m.content
+                if isinstance(cnt, list):
+                    text_pts = [p.get("text", "") for p in cnt if isinstance(p, dict)]
+                    resp_text = "\n".join(text_pts).strip() or str(cnt)
                 else:
-                    raw_response = str(content)
+                    resp_text = str(cnt)
 
-                # Capture any tool calls from intermediate messages
-                tool_calls = []
-                for m in messages:
+                tc_list = []
+                for m in out_messages:
                     if hasattr(m, "tool_calls") and m.tool_calls:
-                        tool_calls.extend(m.tool_calls)
-                if tool_calls:
-                    tool_calls_record = tool_calls
-            else:
-                raw_response = "Request processed with no response."
+                        tc_list.extend(m.tool_calls)
+                if tc_list:
+                    tc_record = tc_list
+            return resp_text or "Request processed with no response.", tc_record
 
+        try:
+            raw_response, tool_calls_record = await _execute_agent(agent_messages)
         except Exception as e:
-            logger.exception("Error during agent message processing: %s", e)
-            raw_response = f"Error processing request: {e}"
+            err_str = str(e)
+            if "rate_limit_exceeded" in err_str or "413" in err_str or "429" in err_str:
+                logger.warning("Rate limit hit with history (%s). Retrying with pruned minimal context...", err_str)
+                try:
+                    # Retry with bare minimum tokens: only immediate prompt, zero history
+                    minimal_messages = [{"role": "user", "content": f"{time_header}\n{message}"}]
+                    raw_response, tool_calls_record = await _execute_agent(minimal_messages)
+                except Exception as retry_err:
+                    logger.exception("Retry failed after rate limit: %s", retry_err)
+                    raw_response = f"Rate limit reached on model. Please retry in a few seconds."
+            else:
+                logger.exception("Error during agent message processing: %s", e)
+                raw_response = f"Error processing request: {e}"
 
         # 6. Store assistant reply & compute vector embedding in PostgreSQL
         try:
@@ -206,6 +222,7 @@ class AgentService:
                 content=raw_response,
                 tool_calls=tool_calls_record,
                 metadata={"task_type": task_type, "rag_used": bool(rag_context)},
+                team_id=team_id,
             )
         except Exception as e:
             logger.warning("Could not persist assistant message to database: %s", e)

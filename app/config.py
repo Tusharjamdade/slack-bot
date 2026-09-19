@@ -14,8 +14,22 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    # Slack Configuration
+    # Slack Configuration (Single bot token fallback & Multi-workspace OAuth)
     SLACK_BOT_TOKEN: str = ""
+    SLACK_CLIENT_ID: str = ""
+    SLACK_CLIENT_SECRET: str = ""
+    SLACK_SIGNING_SECRET: str = ""
+    APP_BASE_URL: str = "http://localhost:8000"
+    SLACK_REDIRECT_URI: Optional[str] = None
+    SLACK_SCOPES: str = "chat:write,app_mentions:read,channels:history,im:history,groups:history,channels:join,channels:read,groups:read"
+    DEFAULT_SLACK_CHANNEL: Optional[str] = None  # Fallback channel for proactive alerts
+
+    # Event-Driven & Proactive Notifications Configuration
+    ENABLE_EVENT_NOTIFICATIONS: bool = True
+    EVENT_POLL_INTERVAL_GMAIL: int = 30       # Poll unread emails every 30 seconds
+    EVENT_POLL_INTERVAL_CALENDAR: int = 60    # Poll upcoming meetings every 60 seconds
+    MEETING_ALERT_WINDOW_MINUTES: int = 30    # Alert for meetings starting within next 30 minutes
+    TIMEZONE: str = "Asia/Kolkata"
 
     # Groq Configuration
     GROQ_API_KEY: str = ""
@@ -31,11 +45,9 @@ class Settings(BaseSettings):
     GOOGLE_TOKEN_FILE: str = "token.json"
     GOOGLE_CLIENT_ID: Optional[str] = None
     GOOGLE_CLIENT_SECRET: Optional[str] = None
+    GOOGLE_REDIRECT_URI: Optional[str] = None
     GOOGLE_REFRESH_TOKEN: Optional[str] = None
 
-    # Google Keep Configuration (for personal accounts using gkeepapi)
-    GOOGLE_KEEP_USERNAME: Optional[str] = None
-    GOOGLE_KEEP_PASSWORD: Optional[str] = None
     # AWS Configuration
     AWS_ACCESS_KEY_ID: Optional[str] = None
     AWS_SECRET_ACCESS_KEY: Optional[str] = None
@@ -56,9 +68,9 @@ class Settings(BaseSettings):
     ENABLE_RAG: bool = True
     EMBEDDING_MODEL: str = "BAAI/bge-small-en-v1.5"
     EMBEDDING_DIM: int = 384
-    RAG_TOP_K: int = 6
+    RAG_TOP_K: int = 2
     RAG_SIMILARITY_THRESHOLD: float = 0.45
-    SHORT_TERM_MEMORY_LIMIT: int = 12
+    SHORT_TERM_MEMORY_LIMIT: int = 4
 
     def model_post_init(self, __context: Any) -> None:
         """Parse and synchronize DATABASE_URL with host, port, and AWS SSL settings."""
@@ -120,15 +132,66 @@ class Settings(BaseSettings):
             pass
         return url
 
+    def get_slack_redirect_uri(self) -> str:
+        """Get effective Slack OAuth redirect URI."""
+        if self.SLACK_REDIRECT_URI:
+            return self.SLACK_REDIRECT_URI
+        base = self.APP_BASE_URL.rstrip("/")
+        return f"{base}/slack/oauth/callback"
+
+    def get_slack_install_url(self, state: str = "") -> str:
+        """Construct official Slack OAuth v2 authorization redirect URL."""
+        client_id = self.SLACK_CLIENT_ID
+        redirect_uri = urllib.parse.quote(self.get_slack_redirect_uri(), safe="")
+        scope = urllib.parse.quote(self.SLACK_SCOPES, safe="")
+        url = f"https://slack.com/oauth/v2/authorize?client_id={client_id}&scope={scope}&redirect_uri={redirect_uri}"
+        if state:
+            url += f"&state={urllib.parse.quote(state, safe='')}"
+        return url
+
+    def get_google_redirect_uri(self) -> str:
+        """Get effective Google OAuth redirect URI."""
+        if self.GOOGLE_REDIRECT_URI:
+            return self.GOOGLE_REDIRECT_URI
+        base = self.APP_BASE_URL.rstrip("/")
+        return f"{base}/auth/google/callback"
+
+    def get_google_auth_url(self, state: str = "") -> str:
+        """Construct Google OAuth consent URL for Calendar and Gmail."""
+        client_id = self.GOOGLE_CLIENT_ID or ""
+        redirect_uri = urllib.parse.quote(self.get_google_redirect_uri(), safe="")
+        
+        scopes_list = [
+            "https://www.googleapis.com/auth/calendar",
+            "https://www.googleapis.com/auth/gmail.modify",
+            "https://www.googleapis.com/auth/gmail.send",
+            "https://www.googleapis.com/auth/userinfo.email",
+            "openid",
+        ]
+
+        scopes = urllib.parse.quote(" ".join(scopes_list), safe="")
+        url = (
+            f"https://accounts.google.com/o/oauth2/v2/auth"
+            f"?client_id={client_id}"
+            f"&response_type=code"
+            f"&scope={scopes}"
+            f"&redirect_uri={redirect_uri}"
+            f"&access_type=offline"
+            f"&prompt=consent"
+        )
+        if state:
+            url += f"&state={urllib.parse.quote(state, safe='')}"
+        return url
+
     def validate_required_settings(self) -> None:
         """Validate core required environment variables on startup."""
         missing = []
-        if not self.SLACK_BOT_TOKEN:
-            missing.append("SLACK_BOT_TOKEN")
+        if not self.SLACK_BOT_TOKEN and not self.SLACK_CLIENT_ID:
+            missing.append("SLACK_BOT_TOKEN or SLACK_CLIENT_ID")
         if not self.GROQ_API_KEY:
             missing.append("GROQ_API_KEY")
         if self.ENABLE_RAG and not self.DATABASE_URL:
-            missing.append("DATABASE_URL (AWS RDS PostgreSQL connection URL)")
+            missing.append("DATABASE_URL (PostgreSQL connection URL)")
         if missing:
             raise ValueError(f"Missing required environment variable(s): {', '.join(missing)}")
 

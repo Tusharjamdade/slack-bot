@@ -23,43 +23,29 @@ def _run_async_safe(coro):
 
 
 @tool
-def search_chat_history(query: str, top_k: int = 5) -> str:
+def search_chat_history(query: str, top_k: int = 3) -> str:
     """
-    Search past Slack conversations, previous messages, decisions, and history
-    using semantic vector search (RDS PostgreSQL + pgvector).
-    
-    Use this tool whenever you need to recall what was discussed earlier, find past information,
-    or look up decisions made in previous chats.
-    
+    Search past Slack conversations, previous messages, and decisions using semantic vector search.
     Args:
-        query: Semantic search query describing what you are looking for (e.g. 'deployment plan', 'database schema').
-        top_k: Number of most relevant conversation chunks to retrieve (default 5).
+        query: Search query describing what you are looking for.
+        top_k: Number of relevant conversation chunks to retrieve (default 3).
     """
     try:
-        return _run_async_safe(rag_service.search_knowledge(query=query, top_k=top_k))
+        return _run_async_safe(rag_service.search_knowledge(query=query, top_k=min(top_k, 3)))
     except Exception as e:
         logger.error("Error executing search_chat_history tool: %s", e)
         return f"Error retrieving conversation history: {e}"
 
 
 @tool
-def get_recent_chat_history(limit: int = 15) -> str:
+def get_recent_chat_history(limit: int = 5) -> str:
     """
-    Retrieve chronological recent chat messages (past user questions and assistant responses)
-    from PostgreSQL.
-    
-    Use this tool whenever the user asks:
-    - 'what are my past questions?'
-    - 'what questions did I ask you in past?'
-    - 'what are my past conversations with you?'
-    - 'what did we talk about earlier?'
-    - 'show recent messages / recap conversation'
-    
+    Retrieve chronological recent chat messages (past user questions and assistant responses).
     Args:
-        limit: Number of recent messages to retrieve (default 15).
+        limit: Number of recent messages to retrieve (default 5).
     """
     try:
-        return _run_async_safe(rag_service.get_recent_history_formatted(limit=limit))
+        return _run_async_safe(rag_service.get_recent_history_formatted(limit=min(limit, 5)))
     except Exception as e:
         logger.error("Error executing get_recent_chat_history tool: %s", e)
         return f"Error retrieving conversation history: {e}"

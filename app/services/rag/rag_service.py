@@ -19,8 +19,9 @@ class RagService:
         user_id: str,
         content: str,
         metadata: Optional[Dict[str, Any]] = None,
+        team_id: Optional[str] = None,
     ) -> Optional[int]:
-        """Store user message in database and index into pgvector."""
+        """Store user message in database and index into pgvector with team_id isolation."""
         try:
             # 1. Save raw message
             msg_id = await vector_store.save_message(
@@ -30,6 +31,7 @@ class RagService:
                 role="user",
                 content=content,
                 metadata=metadata,
+                team_id=team_id,
             )
 
             # 2. Chunk and embed
@@ -45,6 +47,7 @@ class RagService:
                         chunk_text=chunk_text,
                         embedding=emb,
                         metadata=metadata,
+                        team_id=team_id,
                     )
             return msg_id
         except Exception as e:
@@ -59,8 +62,9 @@ class RagService:
         content: str,
         tool_calls: Optional[Any] = None,
         metadata: Optional[Dict[str, Any]] = None,
+        team_id: Optional[str] = None,
     ) -> Optional[int]:
-        """Store assistant message in database and index into pgvector."""
+        """Store assistant message in database and index into pgvector with team_id isolation."""
         try:
             # 1. Save assistant turn
             msg_id = await vector_store.save_message(
@@ -71,6 +75,7 @@ class RagService:
                 content=content,
                 tool_calls=tool_calls,
                 metadata=metadata,
+                team_id=team_id,
             )
 
             # 2. Chunk and embed assistant response
@@ -86,6 +91,7 @@ class RagService:
                         chunk_text=chunk_text,
                         embedding=emb,
                         metadata=metadata,
+                        team_id=team_id,
                     )
             return msg_id
         except Exception as e:
@@ -97,6 +103,7 @@ class RagService:
         message: str,
         channel_id: Optional[str] = None,
         session_id: Optional[str] = None,
+        team_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Adaptive task routing:
@@ -132,7 +139,7 @@ class RagService:
                 msgs = await vector_store.get_recent_messages(
                     session_id=session_id,
                     channel_id=channel_id,
-                    limit=20,
+                    limit=5,
                 )
                 filtered = [m for m in msgs if m.get("content", "").strip() != message.strip()]
                 if not filtered:
@@ -146,12 +153,14 @@ class RagService:
                     }
 
                 formatted_lines = [
-                    "=== RECENT CONVERSATION HISTORY (CHRONOLOGICAL FROM DATABASE) ==="
+                    "=== RECENT CONVERSATION HISTORY (CHRONOLOGICAL) ==="
                 ]
                 for m in filtered:
                     role = m.get("role", "unknown").upper()
-                    date = str(m.get("created_at", ""))[:19]
+                    date = str(m.get("created_at", ""))[:16]
                     cnt = m.get("content", "").strip()
+                    if len(cnt) > 150:
+                        cnt = cnt[:150] + "..."
                     formatted_lines.append(f"- [{date}] {role}: {cnt}")
                 formatted_lines.append("=== END OF CONVERSATION HISTORY ===")
                 formatted_context = "\n".join(formatted_lines)
@@ -181,9 +190,10 @@ class RagService:
             query_vector = embedding_service.embed_query(target_query)
             chunks = await vector_store.search_similar_chunks(
                 query_embedding=query_vector,
-                channel_id=None,  # Allow cross-channel memory recall
+                channel_id=None,  # Allow cross-channel memory recall within same workspace
                 top_k=settings.RAG_TOP_K,
                 threshold=settings.RAG_SIMILARITY_THRESHOLD,
+                team_id=team_id,
             )
 
             if not chunks:
@@ -199,15 +209,16 @@ class RagService:
 
             # Format chunks for prompt injection
             formatted_lines = [
-                "=== RELEVANT PAST CONVERSATION & KNOWLEDGE (RETRIEVED VIA RDS PGVECTOR) ==="
+                "=== RELEVANT PAST CONVERSATION ==="
             ]
             for i, chunk in enumerate(chunks, 1):
                 role = chunk.get("speaker_role", "unknown")
-                date = chunk.get("created_at", "")[:19]
+                date = chunk.get("created_at", "")[:16]
                 text = chunk.get("chunk_text", "").strip()
-                sim = round(chunk.get("similarity", 0.0), 3)
-                formatted_lines.append(f"[{i}] ({role.upper()} at {date}, similarity: {sim}):\n{text}\n")
-            formatted_lines.append("=== END OF RETRIEVED KNOWLEDGE ===")
+                if len(text) > 200:
+                    text = text[:200] + "..."
+                formatted_lines.append(f"[{i}] ({role.upper()} at {date}): {text}")
+            formatted_lines.append("=== END OF KNOWLEDGE ===")
             formatted_context = "\n".join(formatted_lines)
 
             return {
@@ -233,7 +244,7 @@ class RagService:
         self,
         session_id: Optional[str] = None,
         channel_id: Optional[str] = None,
-        limit: int = 15,
+        limit: int = 5,
     ) -> str:
         """Fetch and format recent chronological history for explicit tool calls."""
         try:
@@ -243,12 +254,15 @@ class RagService:
                 limit=limit,
             )
             if not msgs:
-                return "No previous conversation history found in the database."
-            result_lines = [f"Found {len(msgs)} recent conversation records:"]
+                return "No previous conversation history found."
+            result_lines = [f"Recent conversation ({len(msgs)} turns):"]
             for m in msgs:
                 role = m.get("role", "unknown").upper()
-                date = str(m.get("created_at", ""))[:19]
-                result_lines.append(f"- [{role} - {date}]: {m.get('content', '').strip()}")
+                date = str(m.get("created_at", ""))[:16]
+                cnt = m.get("content", "").strip()
+                if len(cnt) > 120:
+                    cnt = cnt[:120] + "..."
+                result_lines.append(f"- [{role} - {date}]: {cnt}")
             return "\n".join(result_lines)
         except Exception as e:
             logger.error("Failed to retrieve formatted history: %s", e)
@@ -257,13 +271,12 @@ class RagService:
     async def search_knowledge(
         self,
         query: str,
-        top_k: int = 5,
+        top_k: int = 3,
         session_id: Optional[str] = None,
         channel_id: Optional[str] = None,
     ) -> str:
         """Explicit tool call function to search past conversation history."""
         import re
-        # If user/agent searches for general past questions or past conversations, route to chronological history
         is_overview = bool(re.search(
             r"\b(past|previous|recent)\s+(questions?|conversations?|messages?|chats?)\b|\bwhat\s+(questions?|did i ask)\b|\bchat history\b",
             query.lower(),
@@ -272,7 +285,7 @@ class RagService:
             return await self.get_recent_history_formatted(
                 session_id=session_id,
                 channel_id=channel_id,
-                limit=top_k * 3,
+                limit=top_k * 2,
             )
 
         try:
@@ -281,18 +294,20 @@ class RagService:
                 query_embedding=query_vector,
                 channel_id=channel_id,
                 top_k=top_k,
-                threshold=0.40,  # Sensitive threshold for explicit search
+                threshold=0.40,
             )
             if not chunks:
                 return f"No previous conversations or notes found matching '{query}'."
 
-            result_lines = [f"Found {len(chunks)} relevant past conversation records:"]
+            result_lines = [f"Found {len(chunks)} relevant records:"]
             for i, c in enumerate(chunks, 1):
                 role = c.get("speaker_role", "unknown")
                 text = c.get("chunk_text", "").strip()
-                date = c.get("created_at", "")[:19]
+                if len(text) > 150:
+                    text = text[:150] + "..."
+                date = c.get("created_at", "")[:16]
                 result_lines.append(f"{i}. [{role.upper()} - {date}]: {text}")
-            return "\n\n".join(result_lines)
+            return "\n".join(result_lines)
         except Exception as e:
             logger.error("Failed to execute search_knowledge tool: %s", e)
             return f"Error querying past knowledge: {e}"
